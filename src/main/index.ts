@@ -373,7 +373,9 @@ if (!app.requestSingleInstanceLock()) {
     })
     library = new Library(
       () => captureFolder(settings),
-      () => join(app.getPath('userData'), 'Captures'),
+      // Fallback when Windows blocks the chosen folder: visible in Explorer, not a
+      // protected folder, and outside AppData (which packaged launchers can redirect).
+      () => join(app.getPath('home'), 'Markup', 'Images'),
       () => settings.blockedFolder,
       (dir) => {
         if (settings.blockedFolder === dir) return

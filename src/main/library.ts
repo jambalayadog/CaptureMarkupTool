@@ -3,8 +3,8 @@
 //
 // If Windows blocks the chosen folder (Controlled Folder Access protects
 // Pictures, Documents and Desktop from unrecognised apps), captures go to a
-// fallback folder under the app's data directory instead, and both folders
-// are shown in the strip.
+// fallback folder (%USERPROFILE%\Markup\Images) instead, and both folders are
+// shown in the strip.
 import { nativeImage, type NativeImage } from 'electron'
 import { existsSync, watch, type FSWatcher } from 'fs'
 import { readdir, stat, unlink, writeFile } from 'fs/promises'
