@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "description": "Capture Markup Tool: a layered screenshot and image markup editor (annotations, pixel art, photo basics).",
   "main": "./out/main/index.js",
-  "author": "jwatt",
-  "license": "UNLICENSED",
+  "author": "jw",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
@@ -17,7 +17,7 @@
     "postinstall": "node node_modules/electron/install.js"
   },
   "build": {
-    "appId": "com.jwatt.capturemarkuptool",
+    "appId": "com.jw.capturemarkuptool",
     "productName": "Capture Markup Tool",
     "executableName": "CaptureMarkupTool",
     "electronLanguages": [

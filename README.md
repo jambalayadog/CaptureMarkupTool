@@ -70,3 +70,7 @@ A few design notes:
 - A selection is its bounding rectangle plus an optional alpha mask, so rectangles stay cheap and lasso or wand shapes are exact. Masks are immutable, which lets the marching-ants outline be traced once and cached.
 - Free transform only previews until it's applied, so cancelling costs nothing. Applying writes a new layer canvas, and undo restores the old one.
 - An annotation layer at 100% opacity and Normal blend draws straight onto the composite. That's what lets the highlighter multiply over the screenshot and lets redaction sample whatever is underneath.
+
+## License
+
+[MIT](LICENSE)

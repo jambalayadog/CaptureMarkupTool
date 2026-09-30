@@ -9,7 +9,7 @@ import { captureFolder, defaultCaptureFolder, loadSettings, saveSettings } from 
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
 
 const ICON = join(__dirname, '../../resources/icon.png')
-const APP_ID = 'com.jwatt.capturemarkuptool'
+const APP_ID = 'com.jw.capturemarkuptool'
 const PRELOAD = join(__dirname, '../preload/index.js')
 const OPENABLE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.imk'])
 const TITLEBAR = '#18191c'
