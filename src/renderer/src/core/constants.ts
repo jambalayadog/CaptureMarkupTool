@@ -18,6 +18,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   shadow: true,
   arrowStart: 'none',
   arrowEnd: 'arrow',
+  arrowHeadScale: 1,
   fontSize: 28,
   fontFamily: FONTS[0].value,
   bold: true,

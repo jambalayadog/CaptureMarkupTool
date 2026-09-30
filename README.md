@@ -9,7 +9,7 @@ A layered screenshot and image markup editor for Windows, somewhere between Snip
 - **Selections**: rectangle (M), lasso (Q: drag freehand, or click point by point) and magic wand (W). Hold Shift to add, Alt to subtract, both to intersect, or pick a mode in the options bar. Brushes, fill, clear, copy and adjustments all respect the selection's exact shape. Ctrl+Shift+I inverts it.
 - **Free transform** (Ctrl+T): scale, rotate, move and flip a pixel layer, or just the selected pixels. Shift keeps proportions or snaps rotation to 15°, and Alt scales from the centre. Turn Smooth off to keep hard pixel edges for pixel art. Enter applies and Esc cancels.
 - **Photo basics**: crop (drag past the edge to add space), resize, canvas size and padding, rotate and flip, brightness, contrast, saturation, hue and blur, copy and paste.
-- **Layers**: pixel layers and annotation layers, with opacity, blend modes, lock, reorder, merge down, rasterize and flatten.
+- **Layers**: pixel layers and annotation layers, with opacity, blend modes, lock, reorder, merge down, rasterize and flatten. Right-click an annotation layer to pick any of its objects.
 - Tabs for multiple images, full undo/redo, and drag and drop.
 
 ## Install

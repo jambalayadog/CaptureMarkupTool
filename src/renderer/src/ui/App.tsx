@@ -86,8 +86,11 @@ export function App(): React.JSX.Element {
       link(id)
     })
     // Messages from the main process are warnings/errors: keep them up until dismissed.
-    const offNotify = api?.onNotify((text) => editor.notify(text, 'sticky'))
+    const offNotify = api?.onNotify((text) => editor.warn(text))
     const offOpen = api?.onOpenFiles((files) => void editor.openFiles(files))
+    void api?.getSettings().then((s) => {
+      editor.wheelZooms = s.wheelZoom
+    })
     api?.ready()
     return () => {
       window.removeEventListener('keydown', down)

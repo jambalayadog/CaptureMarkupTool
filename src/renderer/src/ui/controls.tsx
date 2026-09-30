@@ -1,4 +1,76 @@
-import { useEffect, useState } from 'react'
+import { Check } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+
+export type MenuEntry =
+  | 'separator'
+  | { heading: string }
+  | {
+      label: string
+      action: () => void
+      hint?: string
+      checked?: boolean
+      disabled?: boolean
+      /** Colour chip shown before the label. */
+      swatch?: string | null
+      onHover?: (over: boolean) => void
+    }
+
+/** A right-click menu at (x, y). Closes on any outside click, Escape, or losing focus. */
+export function ContextMenu(props: { x: number; y: number; items: MenuEntry[]; onClose: () => void }): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ left: props.x, top: props.y })
+  useLayoutEffect(() => {
+    // keep the menu on screen (long menus scroll)
+    const r = ref.current!.getBoundingClientRect()
+    setPos({ left: Math.max(4, Math.min(props.x, window.innerWidth - r.width - 4)), top: Math.max(4, Math.min(props.y, window.innerHeight - r.height - 4)) })
+  }, [props.x, props.y])
+  useEffect(() => {
+    const close = (): void => props.onClose()
+    const key = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') props.onClose()
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', key)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('blur', close)
+    }
+  })
+  return (
+    <div
+      ref={ref}
+      className="menu-drop context-menu"
+      style={pos}
+      onMouseDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {props.items.map((it, i) => {
+        if (it === 'separator') return <div key={i} className="menu-sep" />
+        if ('heading' in it) return <div key={i} className="menu-heading">{it.heading}</div>
+        return (
+          <button
+            key={i}
+            className="menu-item"
+            disabled={it.disabled}
+            onMouseEnter={() => it.onHover?.(true)}
+            onMouseLeave={() => it.onHover?.(false)}
+            onClick={() => {
+              props.onClose()
+              it.action()
+            }}
+          >
+            <span className="menu-check">{it.checked && <Check size={13} />}</span>
+            {it.swatch !== undefined && <span className="menu-swatch" style={{ background: it.swatch ?? 'transparent' }} />}
+            <span className="menu-label">{it.label}</span>
+            {it.hint && <span className="menu-shortcut">{it.hint}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export function Num(props: {
   label?: string

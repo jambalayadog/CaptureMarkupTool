@@ -1,4 +1,4 @@
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { PALETTES } from '../core/constants'
 import { hexToRgb, hsvToRgb, isHex, normalizeHex, rgbToHex, rgbToHsv } from '../core/util'
@@ -6,6 +6,16 @@ import { Sel } from './controls'
 import { useEditor } from './state'
 
 type Target = 'primary' | 'secondary'
+
+const COLLAPSED_KEY = 'cmt.colorPanelCollapsed'
+
+function loadCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 function useDrag(onPoint: (x: number, y: number) => void): (e: React.PointerEvent<HTMLElement>) => void {
   return (e) => {
@@ -35,6 +45,16 @@ export function ColorPanel(): React.JSX.Element {
   const [hsv, setHsv] = useState(() => rgbToHsv(...hexToRgb(color)))
   const lastSet = useRef(color)
   const [hex, setHex] = useState(color)
+  // Collapsing gives the Layers panel the room; remembered between sessions.
+  const [collapsed, setCollapsed] = useState(loadCollapsed)
+  const toggle = (): void => {
+    setCollapsed(!collapsed)
+    try {
+      localStorage.setItem(COLLAPSED_KEY, collapsed ? '0' : '1')
+    } catch {
+      // storage unavailable: it just won't be remembered
+    }
+  }
 
   // Follow external colour changes (palette, eyedropper) without losing hue on greys.
   useEffect(() => {
@@ -63,92 +83,103 @@ export function ColorPanel(): React.JSX.Element {
   }
 
   return (
-    <section className="panel color-panel">
-      <div className="panel-head">
+    <section className={collapsed ? 'panel color-panel collapsed' : 'panel color-panel'}>
+      <button className="panel-head panel-toggle" onClick={toggle} title={collapsed ? 'Show colors' : 'Hide colors'} aria-expanded={!collapsed}>
+        <ChevronDown size={13} className="chev" />
         <span>Color</span>
-      </div>
-      <div className="color-top">
-        <div className="swatches">
-          <button
-            className={target === 'secondary' ? 'swatch secondary on' : 'swatch secondary'}
-            style={{ background: ed.secondary }}
-            title="Secondary colour (fills, backgrounds, right-click paint)"
-            onClick={() => setTarget('secondary')}
-          />
-          <button
-            className={target === 'primary' ? 'swatch primary on' : 'swatch primary'}
-            style={{ background: ed.primary }}
-            title="Primary colour"
-            onClick={() => setTarget('primary')}
-          />
-          <button className="swap" title="Swap colours (X)" onClick={() => ed.swapColors()}>
-            <ArrowLeftRight size={12} />
-          </button>
-        </div>
-        <input
-          className="hex-input"
-          value={hex}
-          spellCheck={false}
-          onChange={(e) => {
-            setHex(e.target.value)
-            if (isHex(e.target.value) && e.target.value.replace('#', '').length === 6) {
-              const c = normalizeHex(e.target.value)
-              if (target === 'primary') ed.setPrimary(c)
-              else ed.setSecondary(c)
-            }
-          }}
-          onBlur={() => setHex(color)}
-        />
-      </div>
-      <div className="sv" style={{ background: `hsl(${hsv[0]}, 100%, 50%)` }} onPointerDown={svDown}>
-        <div className="sv-white" />
-        <div className="sv-black" />
-        <div className="sv-thumb" style={{ left: `${hsv[1] * 100}%`, top: `${(1 - hsv[2]) * 100}%`, background: color }} />
-      </div>
-      <div className="hue" onPointerDown={hueDown}>
-        <div className="hue-thumb" style={{ left: `${(hsv[0] / 360) * 100}%` }} />
-      </div>
-      <div className="palette-head">
-        <Sel
-          value={ed.palette}
-          options={Object.keys(PALETTES).map((k) => ({ value: k, label: k }))}
-          onChange={(v) => {
-            ed.palette = v
-            ed.emit()
-          }}
-        />
-      </div>
-      <div className="palette">
-        {PALETTES[ed.palette].map((c, i) => (
-          <button
-            key={i}
-            className="pal"
-            style={{ background: c }}
-            title={`${c} · click for primary, right-click for secondary`}
-            onClick={() => pick(c, false)}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              pick(c, true)
-            }}
-          />
-        ))}
-      </div>
-      {ed.recent.length > 0 && (
-        <div className="recent">
-          {ed.recent.map((c) => (
-            <button
-              key={c}
-              className="pal small"
-              style={{ background: c }}
-              title={c}
-              onClick={() => pick(c, false)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                pick(c, true)
+        {collapsed && (
+          <span className="head-swatches">
+            <span style={{ background: ed.primary }} title="Primary colour" />
+            <span style={{ background: ed.secondary }} title="Secondary colour" />
+          </span>
+        )}
+      </button>
+      {!collapsed && (
+        <>
+          <div className="color-top">
+            <div className="swatches">
+              <button
+                className={target === 'secondary' ? 'swatch secondary on' : 'swatch secondary'}
+                style={{ background: ed.secondary }}
+                title="Secondary colour (fills, backgrounds, right-click paint)"
+                onClick={() => setTarget('secondary')}
+              />
+              <button
+                className={target === 'primary' ? 'swatch primary on' : 'swatch primary'}
+                style={{ background: ed.primary }}
+                title="Primary colour"
+                onClick={() => setTarget('primary')}
+              />
+              <button className="swap" title="Swap colours (X)" onClick={() => ed.swapColors()}>
+                <ArrowLeftRight size={12} />
+              </button>
+            </div>
+            <input
+              className="hex-input"
+              value={hex}
+              spellCheck={false}
+              onChange={(e) => {
+                setHex(e.target.value)
+                if (isHex(e.target.value) && e.target.value.replace('#', '').length === 6) {
+                  const c = normalizeHex(e.target.value)
+                  if (target === 'primary') ed.setPrimary(c)
+                  else ed.setSecondary(c)
+                }
+              }}
+              onBlur={() => setHex(color)}
+            />
+          </div>
+          <div className="sv" style={{ background: `hsl(${hsv[0]}, 100%, 50%)` }} onPointerDown={svDown}>
+            <div className="sv-white" />
+            <div className="sv-black" />
+            <div className="sv-thumb" style={{ left: `${hsv[1] * 100}%`, top: `${(1 - hsv[2]) * 100}%`, background: color }} />
+          </div>
+          <div className="hue" onPointerDown={hueDown}>
+            <div className="hue-thumb" style={{ left: `${(hsv[0] / 360) * 100}%` }} />
+          </div>
+          <div className="palette-head">
+            <Sel
+              value={ed.palette}
+              options={Object.keys(PALETTES).map((k) => ({ value: k, label: k }))}
+              onChange={(v) => {
+                ed.palette = v
+                ed.emit()
               }}
             />
-          ))}
-        </div>
+          </div>
+          <div className="palette">
+            {PALETTES[ed.palette].map((c, i) => (
+              <button
+                key={i}
+                className="pal"
+                style={{ background: c }}
+                title={`${c} · click for primary, right-click for secondary`}
+                onClick={() => pick(c, false)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  pick(c, true)
+                }}
+              />
+            ))}
+          </div>
+          {ed.recent.length > 0 && (
+            <div className="recent">
+              {ed.recent.map((c) => (
+                <button
+                  key={c}
+                  className="pal small"
+                  style={{ background: c }}
+                  title={c}
+                  onClick={() => pick(c, false)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    pick(c, true)
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </section>
   )

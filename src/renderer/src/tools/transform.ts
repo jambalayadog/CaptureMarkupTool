@@ -95,11 +95,11 @@ function begin(ed: Editor): boolean {
   if (!d) return false
   const l = ed.activeLayer()
   if (l?.kind !== 'raster') {
-    ed.notify('Free transform works on pixel layers. To resize annotations, use the Select tool (V).')
+    ed.warn('Free transform works on pixel layers. To resize annotations, use the Select tool (V).')
     return false
   }
   if (l.locked || !l.visible) {
-    ed.notify(l.locked ? 'Layer is locked' : 'Layer is hidden')
+    ed.warn(l.locked ? 'Layer is locked' : 'Layer is hidden')
     return false
   }
   const sel = d.selection
@@ -115,7 +115,7 @@ function begin(ed: Editor): boolean {
     }
     const b = piece && alphaBounds(piece)
     if (!r || !piece || !b) {
-      ed.notify('The selection is empty on this layer')
+      ed.warn('The selection is empty on this layer')
       return false
     }
     src = crop(piece, b)
@@ -125,7 +125,7 @@ function begin(ed: Editor): boolean {
   } else {
     const b = alphaBounds(l.canvas)
     if (!b) {
-      ed.notify('This layer is empty')
+      ed.warn('This layer is empty')
       return false
     }
     src = crop(l.canvas, b)
@@ -325,6 +325,20 @@ export const transformTool: Tool = {
   cancel(ed) {
     drag = null
     cancelTransform(ed)
+  },
+  undo(ed) {
+    const t = session(ed)
+    if (!t) return false
+    drag = null
+    cancelTransform(ed)
+    // Undo first resets the transform, and you stay in it. With nothing left to
+    // reset, it leaves free transform so the step before it (say, a rasterize) undoes.
+    if (isIdentity(t)) {
+      exitTo(ed)
+      return false
+    }
+    if (!begin(ed)) exitTo(ed)
+    return true
   },
   overlay(ed, ctx) {
     const t = session(ed)

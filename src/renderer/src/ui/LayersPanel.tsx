@@ -1,10 +1,11 @@
 import { Copy, Eye, EyeOff, ImagePlus, Lock, LockOpen, Merge, Shapes, SquarePlus, Trash } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BLEND_MODES } from '../core/constants'
-import { mergeDown } from '../core/imageOps'
+import { mergeDown, rasterizeLayer } from '../core/imageOps'
+import { describeObject, objectColor } from '../core/objects'
 import { renderThumb } from '../core/render'
 import type { BlendMode, Layer } from '../core/types'
-import { IconBtn, Num, Sel } from './controls'
+import { ContextMenu, IconBtn, type MenuEntry, Num, Sel } from './controls'
 import { editor, useEditor } from './state'
 
 function Thumb({ layer, version }: { layer: Layer; version: number }): React.JSX.Element {
@@ -21,85 +22,143 @@ function Row({ layer, index }: { layer: Layer; index: number }): React.JSX.Eleme
   const d = ed.d!
   const [editing, setEditing] = useState(false)
   const [over, setOver] = useState<'above' | 'below' | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const active = d.activeLayerId === layer.id
   return (
-    <div
-      className={['layer', active ? 'active' : '', over ? `drop-${over}` : '', layer.visible ? '' : 'hidden'].join(' ')}
-      draggable={!editing}
-      onClick={() => ed.setActiveLayer(layer.id)}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/x-layer', layer.id)
-        e.dataTransfer.effectAllowed = 'move'
-      }}
-      onDragOver={(e) => {
-        if (!e.dataTransfer.types.includes('application/x-layer')) return
-        e.preventDefault()
-        e.stopPropagation()
-        const r = e.currentTarget.getBoundingClientRect()
-        setOver(e.clientY < r.top + r.height / 2 ? 'above' : 'below')
-      }}
-      onDragLeave={() => setOver(null)}
-      onDrop={(e) => {
-        const id = e.dataTransfer.getData('application/x-layer')
-        if (!id) return
-        e.preventDefault()
-        e.stopPropagation()
-        const from = d.layers.findIndex((l) => l.id === id)
-        // rows are shown top-first, so "above" means a higher index
-        let to = over === 'above' ? index + 1 : index
-        if (from < to) to--
-        setOver(null)
-        ed.moveLayer(id, to)
-      }}
-    >
-      <button
-        className="layer-eye"
-        title={layer.visible ? 'Hide layer' : 'Show layer'}
-        onClick={(e) => {
+    <>
+      <div
+        className={['layer', active ? 'active' : '', over ? `drop-${over}` : '', layer.visible ? '' : 'hidden'].join(' ')}
+        draggable={!editing}
+        onClick={() => ed.setActiveLayer(layer.id)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          ed.setActiveLayer(layer.id)
+          setMenu({ x: e.clientX, y: e.clientY })
+        }}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('application/x-layer', layer.id)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('application/x-layer')) return
+          e.preventDefault()
           e.stopPropagation()
-          ed.setLayerProps(layer.id, { visible: !layer.visible })
+          const r = e.currentTarget.getBoundingClientRect()
+          setOver(e.clientY < r.top + r.height / 2 ? 'above' : 'below')
+        }}
+        onDragLeave={() => setOver(null)}
+        onDrop={(e) => {
+          const id = e.dataTransfer.getData('application/x-layer')
+          if (!id) return
+          e.preventDefault()
+          e.stopPropagation()
+          const from = d.layers.findIndex((l) => l.id === id)
+          // rows are shown top-first, so "above" means a higher index
+          let to = over === 'above' ? index + 1 : index
+          if (from < to) to--
+          setOver(null)
+          ed.moveLayer(id, to)
         }}
       >
-        {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-      </button>
-      <Thumb layer={layer} version={ed.version} />
-      <div className="layer-name" onDoubleClick={() => setEditing(true)}>
-        {editing ? (
-          <input
-            autoFocus
-            defaultValue={layer.name}
-            onBlur={(e) => {
-              setEditing(false)
-              if (e.target.value.trim() && e.target.value !== layer.name) ed.setLayerProps(layer.id, { name: e.target.value.trim() })
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              if (e.key === 'Escape') setEditing(false)
-            }}
-          />
-        ) : (
-          <>
-            <span>{layer.name}</span>
-            {layer.kind === 'vector' && (
-              <small title="Annotation layer: objects stay editable">
-                <Shapes size={11} /> {layer.objects.length}
-              </small>
-            )}
-          </>
-        )}
+        <button
+          className="layer-eye"
+          title={layer.visible ? 'Hide layer' : 'Show layer'}
+          onClick={(e) => {
+            e.stopPropagation()
+            ed.setLayerProps(layer.id, { visible: !layer.visible })
+          }}
+        >
+          {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+        <Thumb layer={layer} version={ed.version} />
+        <div className="layer-name" onDoubleClick={() => setEditing(true)}>
+          {editing ? (
+            <input
+              autoFocus
+              defaultValue={layer.name}
+              onBlur={(e) => {
+                setEditing(false)
+                if (e.target.value.trim() && e.target.value !== layer.name) ed.setLayerProps(layer.id, { name: e.target.value.trim() })
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                if (e.key === 'Escape') setEditing(false)
+              }}
+            />
+          ) : (
+            <>
+              <span>{layer.name}</span>
+              {layer.kind === 'vector' && (
+                <small title="Annotation layer: objects stay editable">
+                  <Shapes size={11} /> {layer.objects.length}
+                </small>
+              )}
+            </>
+          )}
+        </div>
+        <button
+          className={layer.locked ? 'layer-lock on' : 'layer-lock'}
+          title={layer.locked ? 'Unlock layer' : 'Lock layer'}
+          onClick={(e) => {
+            e.stopPropagation()
+            ed.setLayerProps(layer.id, { locked: !layer.locked })
+          }}
+        >
+          {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
+        </button>
       </div>
-      <button
-        className={layer.locked ? 'layer-lock on' : 'layer-lock'}
-        title={layer.locked ? 'Unlock layer' : 'Lock layer'}
-        onClick={(e) => {
-          e.stopPropagation()
-          ed.setLayerProps(layer.id, { locked: !layer.locked })
-        }}
-      >
-        {layer.locked ? <Lock size={13} /> : <LockOpen size={13} />}
-      </button>
-    </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={layerMenu(layer, index)}
+          onClose={() => {
+            setMenu(null)
+            hover(null)
+          }}
+        />
+      )}
+    </>
   )
+}
+
+/** Outline an object on the canvas while its menu entry is hovered. */
+function hover(id: string | null): void {
+  const d = editor.d
+  if (!d || d.live.hoverId === id) return
+  d.live.hoverId = id
+  editor.requestRender()
+}
+
+/** Right-click menu for a layer: an annotation layer lists its objects, topmost first. */
+function layerMenu(layer: Layer, index: number): MenuEntry[] {
+  const ed = editor
+  const d = ed.d!
+  const items: MenuEntry[] = []
+  if (layer.kind === 'vector') {
+    const n = layer.objects.length
+    items.push({ heading: n ? `${n} object${n > 1 ? 's' : ''}` : 'No objects yet' })
+    for (const o of [...layer.objects].reverse()) {
+      items.push({
+        label: describeObject(o),
+        swatch: objectColor(o),
+        checked: d.selectedIds.includes(o.id),
+        onHover: (over) => hover(over ? o.id : null),
+        action: () => {
+          ed.setActiveLayer(layer.id)
+          ed.setTool('select')
+          ed.select([o.id])
+        }
+      })
+    }
+    items.push('separator', { label: 'Rasterize layer', action: () => rasterizeLayer(ed, layer.id) })
+  }
+  items.push(
+    { label: 'Duplicate layer', hint: 'Ctrl+J', action: () => ed.duplicateLayer(layer.id) },
+    { label: 'Merge down', hint: 'Ctrl+E', disabled: index < 1, action: () => mergeDown(ed, layer.id) },
+    { label: 'Delete layer', disabled: d.layers.length < 2, action: () => ed.deleteLayer(layer.id) }
+  )
+  return items
 }
 
 export function LayersPanel(): React.JSX.Element {

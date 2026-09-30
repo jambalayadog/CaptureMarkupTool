@@ -339,6 +339,7 @@ function SettingsDialog(): React.JSX.Element {
         if (!s) return
         const r = await api!.setSettings(s)
         if (!r.ok) return setError(r.error ?? 'Could not save settings')
+        ed.wheelZooms = s.wheelZoom
         close()
         ed.notify('Settings saved')
       }}
@@ -395,7 +396,8 @@ function SettingsDialog(): React.JSX.Element {
                 className="btn"
                 onClick={async () => {
                   const r = await api!.retryLibraryFolder()
-                  ed.notify(r.ok ? `Captures will be saved to ${r.folder}` : 'Still blocked by Windows', 6000)
+                  if (r.ok) ed.notify(`Captures will be saved to ${r.folder}`, 6000)
+                  else ed.warn('Still blocked by Windows')
                   setLib(await api!.listLibrary())
                 }}
               >
@@ -403,6 +405,14 @@ function SettingsDialog(): React.JSX.Element {
               </button>
             </div>
           )}
+          <label className="check">
+            <input type="checkbox" checked={s.wheelZoom} onChange={(e) => setS({ ...s, wheelZoom: e.target.checked })} />
+            Mouse wheel zooms the canvas
+          </label>
+          <p className="form-note">
+            Hold Alt to scroll with the wheel instead, or Shift to scroll sideways. Turn this off if you use a trackpad: the
+            wheel then scrolls, and Ctrl+wheel or pinching zooms.
+          </p>
           <label className="check">
             <input type="checkbox" checked={s.copyOnCapture} onChange={(e) => setS({ ...s, copyOnCapture: e.target.checked })} />
             Also copy every capture to the clipboard
@@ -437,8 +447,8 @@ const SHORTCUTS: [string, string][] = [
   ['Brush / stroke size', '[ and ]'],
   ['Swap colours / Reset colours', 'X / D'],
   ['Pick colour while painting', 'Hold Alt'],
-  ['Pan', 'Space-drag, middle-drag, or scroll'],
-  ['Zoom', 'Ctrl+scroll, Ctrl+= / Ctrl+-'],
+  ['Pan', 'Space-drag or middle-drag; Alt+wheel, Shift+wheel sideways'],
+  ['Zoom', 'Mouse wheel (see Settings), Ctrl+= / Ctrl+-'],
   ['Fit / Actual size', 'Ctrl+0 / Ctrl+1'],
   ['Pixel grid', "Ctrl+'"],
   ['Merge layer down', 'Ctrl+E'],

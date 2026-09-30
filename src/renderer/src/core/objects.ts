@@ -66,8 +66,11 @@ function addCircle(p: Path2D, c: Vec, r: number): void {
   p.arc(c.x, c.y, r, 0, Math.PI * 2)
 }
 
+/** Older projects have no headScale. */
+const headScale = (o: LineObj): number => o.headScale ?? 1
+
 export function headLength(o: LineObj): number {
-  return Math.max(10, o.width * 3.2 + 6)
+  return Math.max(10, o.width * 3.2 + 6) * headScale(o)
 }
 
 interface LineGeom {
@@ -102,7 +105,7 @@ function lineGeom(o: LineObj): LineGeom {
       return { x: tip.x - dir.x * L * 0.62, y: tip.y - dir.y * L * 0.62 }
     }
     if (kind === 'dot') {
-      const r = Math.max(o.width * 1.6, 4)
+      const r = Math.max(o.width * 1.6, 4) * headScale(o)
       addCircle(heads, tip, r)
       addCircle(full, tip, r)
     }
@@ -374,7 +377,11 @@ export function hitObject(o: VObj, p: Vec, tol: number): boolean {
       return false
     }
     case 'line':
-      return distToSegment(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }) <= o.width / 2 + tol + (o.end === 'arrow' ? 3 : 0)
+      // the shaft (with some slack), or anywhere on the drawn heads
+      return (
+        distToSegment(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }) <= o.width / 2 + tol ||
+        ((o.start !== 'none' || o.end !== 'none') && measure.isPointInPath(lineGeom(o).full, p.x, p.y))
+      )
     case 'step':
       return Math.hypot(p.x - o.x, p.y - o.y) <= o.size / 2 + tol
     case 'path': {
@@ -627,6 +634,31 @@ export function setObjectColor(o: VObj, color: string): void {
     case 'redact':
       o.color = color
       break
+  }
+}
+
+/** A short name for an object, for menus and lists: "Arrow", "Text “Hello…”", "Step 3". */
+export function describeObject(o: VObj): string {
+  switch (o.type) {
+    case 'line':
+      if (o.start === 'arrow' && o.end === 'arrow') return 'Double arrow'
+      return o.start === 'none' && o.end === 'none' ? 'Line' : 'Arrow'
+    case 'rect':
+      return 'Rectangle'
+    case 'ellipse':
+      return 'Ellipse'
+    case 'text': {
+      const kind = o.tail ? 'Callout' : 'Text'
+      const first = o.text.trim().split('\n')[0]
+      if (!first) return kind
+      return `${kind} “${first.length > 24 ? `${first.slice(0, 23)}…` : first}”`
+    }
+    case 'step':
+      return `Step ${o.n}`
+    case 'path':
+      return o.blend === 'multiply' ? 'Highlight' : 'Stroke'
+    case 'redact':
+      return { pixelate: 'Pixelate', blur: 'Blur', solid: 'Solid' }[o.mode] + ' redaction'
   }
 }
 

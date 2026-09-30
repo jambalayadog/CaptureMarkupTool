@@ -14,7 +14,7 @@ export function Welcome(): React.JSX.Element {
 
   const paste = async (): Promise<void> => {
     const blob = await readClipboardImage()
-    if (!blob) return ed.notify('No image on the clipboard')
+    if (!blob) return ed.warn('No image on the clipboard')
     ed.openCanvas(await decodeImage(blob), 'Pasted image')
   }
 

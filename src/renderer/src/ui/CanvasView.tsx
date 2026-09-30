@@ -82,7 +82,7 @@ export function CanvasView(): React.JSX.Element {
       try {
         ed.pasteCanvas(await decodeImage(bytes), f.name.replace(/\.[a-z0-9]+$/i, ''))
       } catch {
-        ed.notify(`Couldn't open ${f.name}`)
+        ed.warn(`Couldn't open ${f.name}`)
       }
     }
   }

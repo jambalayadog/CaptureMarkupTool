@@ -123,6 +123,8 @@ export class Editor {
   recent: string[] = []
   palette = 'Default'
   showGrid = true
+  /** The mouse wheel zooms (a setting); otherwise it scrolls and Ctrl+wheel zooms. */
+  wheelZooms = true
   dialog: DialogKind | null = null
   toast: { id: number; text: string; sticky: boolean } | null = null
   textEdit: TextEditState | null = null
@@ -199,6 +201,11 @@ export class Editor {
     this.emit()
   }
 
+  /** Explain why something didn't happen. Stays up until the user closes it. */
+  warn(text: string): void {
+    this.notify(text, 'sticky')
+  }
+
   dismissToast(): void {
     clearTimeout(this.toastTimer)
     this.toast = null
@@ -260,7 +267,7 @@ export class Editor {
         }
       } catch (err) {
         console.error(err)
-        this.notify(`Couldn't open ${f.name}`)
+        this.warn(`Couldn't open ${f.name}`)
       }
     }
   }
@@ -302,7 +309,7 @@ export class Editor {
       console.error(err)
       // IPC errors arrive as "Error invoking remote method '…': Error: <message>"
       const msg = (err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-      this.notify(`Couldn't save: ${msg}`, 'sticky')
+      this.warn(`Couldn't save: ${msg}`)
       return
     }
     if (target.path || target.handle) {
@@ -314,7 +321,8 @@ export class Editor {
     d.history.markSaved()
     const layered = d.layers.length > 1 || d.layers.some((l) => l.kind === 'vector')
     this.notify(
-      layered && target.kind !== 'imk' ? `Saved ${target.name} (flattened; save as .imk to keep layers)` : `Saved ${target.name}`
+      layered && target.kind !== 'imk' ? `Saved ${target.name} (flattened; save as .imk to keep layers)` : `Saved ${target.name}`,
+      layered && target.kind !== 'imk' ? 5000 : 2400
     )
   }
 
@@ -354,10 +362,8 @@ export class Editor {
   undo(): void {
     if (!this.d || this.dragTool) return
     if (this.textEdit) this.endTextEdit()
-    // Mid-transform, undo just resets the transform (like Photoshop, you stay in it).
-    const transforming = !!this.d.live.transform
+    if (this.toolImpl.undo?.(this)) return
     this.toolImpl.cancel?.(this)
-    if (transforming) return this.toolImpl.activate?.(this)
     if (undoDoc(this.d)) this.afterHistoryJump()
   }
 
@@ -452,7 +458,7 @@ export class Editor {
   deleteLayer(id: string): void {
     const d = this.d
     if (!d) return
-    if (d.layers.length <= 1) return this.notify("Can't delete the only layer")
+    if (d.layers.length <= 1) return this.warn("Can't delete the only layer")
     const i = d.layers.findIndex((l) => l.id === id)
     if (i < 0) return
     const before = this.snapshot()
@@ -801,7 +807,7 @@ export class Editor {
     const d = this.d
     const l = this.activeLayer()
     if (!d?.selection || l?.kind !== 'raster') return
-    if (l.locked) return this.notify('Layer is locked')
+    if (l.locked) return this.warn('Layer is locked')
     const s = d.selection
     const edit = this.beginRasterEdit(l)
     clearInside(l.canvas, s, l.x, l.y)
@@ -871,7 +877,7 @@ export class Editor {
       this.notify(s ? 'Copied selection (merged)' : 'Copied image to clipboard')
     } catch (err) {
       console.error(err)
-      this.notify("Couldn't access the clipboard")
+      this.warn("Couldn't access the clipboard")
     }
   }
 
@@ -879,7 +885,7 @@ export class Editor {
     try {
       this.pasteCanvas(await decodeImage(blob), name)
     } catch {
-      this.notify("Clipboard image couldn't be read")
+      this.warn("Clipboard image couldn't be read")
     }
   }
 
@@ -943,7 +949,7 @@ export class Editor {
     if (this.objectClipboard && text === `markup-objects:${this.clipboardToken}`) return this.pasteObjects()
     const blob = await platform.readClipboardImage()
     if (blob) return this.pasteBlob(blob)
-    this.notify('Nothing to paste')
+    this.warn('Nothing to paste')
   }
 
   // ---- colours & options -------------------------------------------------------------
@@ -1217,14 +1223,13 @@ export class Editor {
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.vh : 1
     const r = this.canvas!.getBoundingClientRect()
     const anchor = { x: e.clientX - r.left, y: e.clientY - r.top }
-    if (e.ctrlKey || e.metaKey || e.altKey) {
-      const z = this.d.view.zoom * Math.exp(-e.deltaY * unit * 0.0025)
-      this.setZoom(z, anchor)
-      return
-    }
-    const dx = (e.shiftKey ? e.deltaY : e.deltaX) * unit
-    const dy = (e.shiftKey ? 0 : e.deltaY) * unit
-    this.panBy(-dx, -dy)
+    // Shift scrolls sideways (Chromium may already have moved the delta to deltaX)
+    if (e.shiftKey) return this.panBy(-(e.deltaY || e.deltaX) * unit, 0)
+    // Trackpad pinches arrive as Ctrl+wheel, so Ctrl always zooms. Alt swaps
+    // zooming and scrolling, whichever the wheel does by default.
+    const zoom = e.ctrlKey || e.metaKey || this.wheelZooms !== e.altKey
+    if (zoom && e.deltaY) return this.setZoom(this.d.view.zoom * Math.exp(-e.deltaY * unit * 0.0025), anchor)
+    this.panBy(-e.deltaX * unit, zoom ? 0 : -e.deltaY * unit)
   }
 
   updateCursor(p: PointerInfo | null): void {
@@ -1279,7 +1284,7 @@ export class Editor {
           return true
         case 'u':
           if (this.activeLayer()?.kind === 'raster') this.showDialog('adjust')
-          else this.notify('Adjustments apply to pixel layers. Select one in the Layers panel.')
+          else this.warn('Adjustments apply to pixel layers. Select one in the Layers panel.')
           return true
         case 'z':
           shift ? this.redo() : this.undo()
@@ -1660,7 +1665,7 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
     case 'ellipse':
       return { strokeWidth: o.strokeWidth, shapeFill: !!o.fill, cornerRadius: o.radius, dashed: o.dashed, shadow: o.shadow }
     case 'line':
-      return { strokeWidth: o.width, arrowStart: o.start, arrowEnd: o.end, dashed: o.dashed, shadow: o.shadow }
+      return { strokeWidth: o.width, arrowStart: o.start, arrowEnd: o.end, arrowHeadScale: o.headScale ?? 1, dashed: o.dashed, shadow: o.shadow }
     case 'text':
       return { fontSize: o.fontSize, fontFamily: o.fontFamily, bold: o.bold, shadow: o.shadow, ...(o.tail ? {} : { textBg: !!o.bg }) }
     case 'step':
@@ -1691,6 +1696,7 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       if (k === 'strokeWidth') return set(o, { width: v as number })
       if (k === 'arrowStart') return set(o, { start: v as LineHead })
       if (k === 'arrowEnd') return set(o, { end: v as LineHead })
+      if (k === 'arrowHeadScale') return set(o, { headScale: v as number })
       if (k === 'dashed') return set(o, { dashed: v as boolean })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
       return false

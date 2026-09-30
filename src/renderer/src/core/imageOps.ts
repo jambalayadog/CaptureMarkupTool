@@ -178,8 +178,8 @@ export function applyFilter(ed: Editor, filter: string, label: string): void {
   const d = ed.d
   const l = ed.activeLayer()
   if (!d) return
-  if (l?.kind !== 'raster') return ed.notify('Adjustments apply to pixel layers. Select one in the Layers panel.')
-  if (l.locked) return ed.notify('Layer is locked')
+  if (l?.kind !== 'raster') return ed.warn('Adjustments apply to pixel layers. Select one in the Layers panel.')
+  if (l.locked) return ed.warn('Layer is locked')
   const before = ed.snapshot()
   l.canvas = filteredLayer(l, filter, d.selection)
   ed.commit(label, before)
@@ -205,8 +205,8 @@ export function trim(ed: Editor): void {
       }
     }
   }
-  if (x1 < 0) return ed.notify('Nothing to trim: the image is empty')
-  if (x0 === 0 && y0 === 0 && x1 === d.width - 1 && y1 === d.height - 1) return ed.notify('No transparent edges to trim')
+  if (x1 < 0) return ed.warn('Nothing to trim: the image is empty')
+  if (x0 === 0 && y0 === 0 && x1 === d.width - 1 && y1 === d.height - 1) return ed.warn('No transparent edges to trim')
   cropTo(ed, { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 })
 }
 
@@ -293,6 +293,6 @@ export function flattenImage(ed: Editor): void {
 
 export function cropToSelection(ed: Editor): void {
   const s = ed.d?.selection
-  if (!s) return ed.notify('Make a selection first (M)')
+  if (!s) return ed.warn('Make a selection first (M)')
   cropTo(ed, s)
 }

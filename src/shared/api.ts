@@ -30,6 +30,8 @@ export interface Settings {
   copyOnCapture: boolean
   /** Closing the editor window hides it to the tray instead of quitting. */
   closeToTray: boolean
+  /** The mouse wheel zooms the canvas (off: it scrolls, and Ctrl+wheel zooms). */
+  wheelZoom: boolean
   /** Start in the tray when Windows starts (read from and written to the registry, not settings.json). */
   openAtLogin: boolean
   /** Save every capture to the library folder automatically. */

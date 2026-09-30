@@ -81,6 +81,16 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           <Seg value={o.arrowStart} options={HEADS_START} onChange={set_('arrowStart')} />
           <span className="opt-label">End</span>
           <Seg value={o.arrowEnd} options={HEADS_END} onChange={set_('arrowEnd')} />
+          <Num
+            label="Head"
+            value={Math.round(o.arrowHeadScale * 100)}
+            min={25}
+            max={400}
+            step={5}
+            suffix="%"
+            title="Arrowhead size, relative to the line width"
+            onChange={(v) => ed.setOpt('arrowHeadScale', v / 100)}
+          />
           {dashed}
           {shadow}
         </>

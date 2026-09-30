@@ -32,4 +32,6 @@ export interface Tool {
   overlay?(ed: Editor, ctx: CanvasRenderingContext2D): void
   activate?(ed: Editor): void
   deactivate?(ed: Editor): void
+  /** Undo pressed: return true if the tool undid something of its own instead. */
+  undo?(ed: Editor): boolean
 }

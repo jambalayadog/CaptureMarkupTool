@@ -68,6 +68,8 @@ export interface LineObj {
   width: number
   start: Head
   end: Head
+  /** Arrowhead and dot size relative to the default for this width (1 = 100%). */
+  headScale: number
   dashed: boolean
   shadow: boolean
 }
@@ -197,6 +199,7 @@ export interface ToolOptions {
   shadow: boolean
   arrowStart: Head
   arrowEnd: Head
+  arrowHeadScale: number
   fontSize: number
   fontFamily: string
   bold: boolean

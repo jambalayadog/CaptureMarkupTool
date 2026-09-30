@@ -62,7 +62,7 @@ export const TOOL_GROUPS: ToolMeta[][] = [
   ],
   [
     { id: 'hand', label: 'Hand (hold Space)', icon: Hand, hint: 'Drag to pan · or hold Space with any tool' },
-    { id: 'zoom', label: 'Zoom', key: 'Z', icon: ZoomIn, hint: 'Click to zoom in · Alt-click to zoom out · Ctrl+scroll zooms anywhere' }
+    { id: 'zoom', label: 'Zoom', key: 'Z', icon: ZoomIn, hint: 'Click to zoom in · Alt-click to zoom out · the mouse wheel zooms anywhere' }
   ]
 ]
 

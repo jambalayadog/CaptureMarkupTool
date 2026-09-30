@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, FolderOpen } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { LibraryItem, LibraryListing } from '../../../shared/api'
 import { api } from '../core/platform'
+import { ContextMenu } from './controls'
 import { useEditor } from './state'
 
 const KEY = 'markup.strip'
@@ -35,43 +36,6 @@ function ago(mtime: number): string {
 const normPath = (p: string): string => p.replace(/\//g, '\\').toLowerCase()
 const samePath = (a: string, b: string): boolean => normPath(a) === normPath(b)
 
-function ItemMenu(props: { x: number; y: number; onClose: () => void; items: [string, () => void][] }): React.JSX.Element {
-  useEffect(() => {
-    const close = (): void => props.onClose()
-    const key = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') props.onClose()
-    }
-    window.addEventListener('mousedown', close)
-    window.addEventListener('keydown', key)
-    window.addEventListener('blur', close)
-    return () => {
-      window.removeEventListener('mousedown', close)
-      window.removeEventListener('keydown', key)
-      window.removeEventListener('blur', close)
-    }
-  })
-  // keep the menu on screen
-  const left = Math.min(props.x, window.innerWidth - 210)
-  const top = Math.min(props.y, window.innerHeight - props.items.length * 30 - 16)
-  return (
-    <div className="menu-drop context-menu" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
-      {props.items.map(([label, action]) => (
-        <button
-          key={label}
-          className="menu-item"
-          onClick={() => {
-            props.onClose()
-            action()
-          }}
-        >
-          <span className="menu-check" />
-          <span className="menu-label">{label}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 /** Snagit-style tray of recent captures (desktop app only). */
 export function CaptureStrip(): React.JSX.Element | null {
   const ed = useEditor()
@@ -103,7 +67,7 @@ export function CaptureStrip(): React.JSX.Element | null {
     if (doc) return ed.activate(doc.id)
     const f = await lib.readFile(item.path)
     if (f) await ed.openFiles([f])
-    else ed.notify(`Couldn't open ${item.name}`)
+    else ed.warn(`Couldn't open ${item.name}`)
   }
 
   const toggle = (): void => {
@@ -160,26 +124,28 @@ export function CaptureStrip(): React.JSX.Element | null {
         </div>
       )}
       {menu && (
-        <ItemMenu
+        <ContextMenu
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
           items={[
-            ['Open', () => void openItem(menu.item)],
-            [
-              'Copy image',
-              () =>
-                void lib.copyFile(menu.item.path).then((ok) => ed.notify(ok ? 'Copied image to clipboard' : "Couldn't copy that image"))
-            ],
-            ['Show in folder', () => lib.revealFile(menu.item.path)],
-            [
-              'Move to Recycle Bin',
-              () =>
+            { label: 'Open', action: () => void openItem(menu.item) },
+            {
+              label: 'Copy image',
+              action: () =>
+                void lib.copyFile(menu.item.path).then((ok) => (ok ? ed.notify('Copied image to clipboard') : ed.warn("Couldn't copy that image")))
+            },
+            { label: 'Show in folder', action: () => lib.revealFile(menu.item.path) },
+            'separator',
+            {
+              label: 'Move to Recycle Bin',
+              action: () =>
                 void lib.trashFile(menu.item.path).then((ok) => {
-                  ed.notify(ok ? `Moved ${menu.item.name} to the Recycle Bin` : "Couldn't delete that file")
+                  if (ok) ed.notify(`Moved ${menu.item.name} to the Recycle Bin`)
+                  else ed.warn("Couldn't delete that file")
                   refresh()
                 })
-            ]
+            }
           ]}
         />
       )}
