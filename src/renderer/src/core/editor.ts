@@ -283,7 +283,8 @@ export class Editor {
     if (!saveAs && d.fileKind && (d.filePath || d.fileHandle)) {
       target = { path: d.filePath, handle: d.fileHandle, name: `${d.name}.${d.fileKind}`, kind: d.fileKind }
     } else {
-      target = await platform.chooseSaveTarget(`${d.name}.${d.fileKind ?? 'png'}`, d.fileKind ?? 'png')
+      // Start where the file already lives (the main process defaults to the capture library).
+      target = await platform.chooseSaveTarget(d.filePath ?? `${d.name}.${d.fileKind ?? 'png'}`, d.fileKind ?? 'png')
       if (!target) return
     }
     try {

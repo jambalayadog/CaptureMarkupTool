@@ -31,6 +31,7 @@ const api: EditorApi = {
   trashFile: (path) => ipcRenderer.invoke('library:trash', path),
   startDrag: (path) => ipcRenderer.send('library:startDrag', path),
   openLibraryFolder: () => ipcRenderer.send('library:openFolder'),
+  retryLibraryFolder: () => ipcRenderer.invoke('library:retry'),
   onLibraryChanged: (cb) => listen('library:changed', () => cb()),
   chooseFolder: (current) => ipcRenderer.invoke('settings:chooseFolder', current)
 }

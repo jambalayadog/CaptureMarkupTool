@@ -7,7 +7,7 @@
 // are shown in the strip.
 import { nativeImage, type NativeImage } from 'electron'
 import { existsSync, watch, type FSWatcher } from 'fs'
-import { readdir, stat, writeFile } from 'fs/promises'
+import { readdir, stat, unlink, writeFile } from 'fs/promises'
 import { extname, join, resolve, sep } from 'path'
 import type { LibraryItem } from '../shared/api'
 import { ensureDir } from './fsutil'
@@ -27,23 +27,67 @@ export class Library {
   private thumbs = new Map<string, string>()
   private watchers = new Map<string, FSWatcher>()
   private debounce: NodeJS.Timeout | null = null
-  /** The chosen folder refused writes this session; use the fallback. */
-  private redirected = false
 
+  /**
+   * `blocked`/`setBlocked` persist which folder Windows refused, so later
+   * launches go straight to the fallback instead of tripping Windows'
+   * "Unauthorized changes blocked" notification on every capture.
+   */
   constructor(
     private chosen: () => string,
     private fallback: () => string,
+    private blocked: () => string,
+    private setBlocked: (dir: string) => void,
     private onChange: () => void
   ) {}
 
-  /** Folder new captures are saved to. */
-  folder(): string {
-    return this.redirected ? this.fallback() : this.chosen()
+  private isBlocked(): boolean {
+    const b = this.blocked()
+    return !!b && norm(b) === norm(this.chosen())
   }
 
-  /** Try the chosen folder again (after the user picks a different one). */
+  /** Folder new captures are saved to. */
+  folder(): string {
+    return this.isBlocked() ? this.fallback() : this.chosen()
+  }
+
+  /** The chosen folder, if Windows is refusing it (captures go to the fallback). */
+  blockedFolder(): string | null {
+    return this.isBlocked() ? this.chosen() : null
+  }
+
+  /** Forget a block (e.g. the user picked a different folder). */
   reset(): void {
-    this.redirected = false
+    this.setBlocked('')
+  }
+
+  /** Test the chosen folder again, e.g. after allowing Markup in Windows Security. */
+  async retry(): Promise<boolean> {
+    const dir = this.chosen()
+    const probe = join(dir, '.markup-write-test')
+    try {
+      await ensureDir(dir)
+      await writeFile(probe, '')
+      await unlink(probe)
+      this.setBlocked('')
+      return true
+    } catch {
+      this.setBlocked(dir)
+      return false
+    }
+  }
+
+  /** A folder that exists and can be shown: the chosen one, or the fallback if it's blocked. */
+  async openable(): Promise<string> {
+    try {
+      await ensureDir(this.folder())
+      return this.folder()
+    } catch (err) {
+      if (this.isBlocked()) throw err
+      this.setBlocked(this.chosen())
+      await ensureDir(this.fallback())
+      return this.fallback()
+    }
   }
 
   /** Every folder whose captures appear in the strip. */
@@ -59,9 +103,9 @@ export class Library {
       return { path: await this.saveIn(this.folder(), png, name), blockedFolder: null }
     } catch (err) {
       const blocked = this.folder()
-      if (this.redirected || norm(blocked) === norm(this.fallback())) throw err
+      if (this.isBlocked() || norm(blocked) === norm(this.fallback())) throw err
       console.warn('[library] saving to', blocked, 'failed; using the fallback folder:', (err as Error).message)
-      this.redirected = true
+      this.setBlocked(blocked)
       return { path: await this.saveIn(this.fallback(), png, name), blockedFolder: blocked }
     }
   }

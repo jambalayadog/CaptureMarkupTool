@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { Settings } from '../../../shared/api'
+import type { LibraryListing, Settings } from '../../../shared/api'
 import { applyFilter, resizeCanvas, resizeImage } from '../core/imageOps'
 import { api } from '../core/platform'
 import { Num } from './controls'
@@ -296,8 +296,10 @@ function SettingsDialog(): React.JSX.Element {
   const [s, setS] = useState<Settings | null>(null)
   const [recording, setRecording] = useState(false)
   const [error, setError] = useState('')
+  const [lib, setLib] = useState<LibraryListing | null>(null)
   useEffect(() => {
     void api?.getSettings().then(setS)
+    void api?.listLibrary().then(setLib)
   }, [])
   useEffect(() => {
     if (!recording) return
@@ -378,6 +380,29 @@ function SettingsDialog(): React.JSX.Element {
               </button>
             )}
           </div>
+          {lib?.blocked && (
+            <div className="form-warning">
+              <p>
+                Windows is blocking Markup from saving to <b>{lib.blocked}</b> (Controlled folder access), so captures are
+                going to <b>{lib.folder}</b>.
+              </p>
+              <p>
+                To use it, open Windows Security → Virus &amp; threat protection → Ransomware protection → Allow an app
+                through Controlled folder access, add <code>{lib.exePath}</code>, then click Try again.
+              </p>
+              <button
+                type="button"
+                className="btn"
+                onClick={async () => {
+                  const r = await api!.retryLibraryFolder()
+                  ed.notify(r.ok ? `Captures will be saved to ${r.folder}` : 'Still blocked by Windows', 6000)
+                  setLib(await api!.listLibrary())
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          )}
           <label className="check">
             <input type="checkbox" checked={s.copyOnCapture} onChange={(e) => setS({ ...s, copyOnCapture: e.target.checked })} />
             Also copy every capture to the clipboard

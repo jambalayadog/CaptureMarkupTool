@@ -8,7 +8,8 @@ export const DEFAULT_SETTINGS: Settings = {
   copyOnCapture: false,
   closeToTray: true,
   autoSaveCaptures: true,
-  captureFolder: ''
+  captureFolder: '',
+  blockedFolder: ''
 }
 
 /** Where captures are saved. MARKUP_CAPTURE_DIR overrides it in development (for tests). */

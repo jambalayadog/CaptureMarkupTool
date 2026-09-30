@@ -3,7 +3,7 @@ import { basename, extname, isAbsolute, join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { CaptureManager } from './capture'
-import { ensureDir, explainWriteError } from './fsutil'
+import { explainWriteError } from './fsutil'
 import { Library } from './library'
 import { captureFolder, loadSettings, saveSettings } from './settings'
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
@@ -212,7 +212,8 @@ function registerIpc(): void {
     ]
     const first = all.find((f) => f.extensions[0] === kind) ?? all[0]
     const opts: Electron.SaveDialogOptions = {
-      defaultPath: isAbsolute(name) ? name : join(app.getPath('pictures'), name),
+      // Start in the capture library: it's a folder Markup is known to be able to write to.
+      defaultPath: isAbsolute(name) ? name : join(library.folder(), name),
       filters: [first, ...all.filter((f) => f !== first)]
     }
     const r = editor ? await dialog.showSaveDialog(editor, opts) : await dialog.showSaveDialog(opts)
@@ -258,7 +259,8 @@ function registerIpc(): void {
       return { ok: false, error: `Couldn't register ${prettyAccelerator(next.hotkey)}. Another app may already be using it.` }
     }
     const folderChanged = next.captureFolder !== settings.captureFolder
-    settings = { ...next }
+    // blockedFolder is the app's own bookkeeping; don't let a stale copy from the page overwrite it
+    settings = { ...next, blockedFolder: settings.blockedFolder }
     saveSettings(settings)
     updateTrayMenu()
     if (folderChanged) {
@@ -271,7 +273,18 @@ function registerIpc(): void {
   ipcMain.on('app:quit', requestQuit)
 
   // ---- capture library ----
-  ipcMain.handle('library:list', async () => ({ folder: library.folder(), items: await library.list() }))
+  ipcMain.handle('library:list', async () => ({
+    folder: library.folder(),
+    items: await library.list(),
+    blocked: library.blockedFolder(),
+    exePath: process.execPath
+  }))
+
+  ipcMain.handle('library:retry', async () => {
+    const ok = await library.retry()
+    editor?.webContents.send('library:changed')
+    return { ok, folder: library.folder() }
+  })
 
   ipcMain.handle('library:read', async (_e, p: string) => (await readFiles([p]))[0] ?? null)
 
@@ -296,10 +309,8 @@ function registerIpc(): void {
   })
 
   ipcMain.on('library:openFolder', async () => {
-    const dir = library.folder()
     try {
-      await ensureDir(dir)
-      void shell.openPath(dir)
+      void shell.openPath(await library.openable())
     } catch (err) {
       notify((err as Error).message)
     }
@@ -363,6 +374,12 @@ if (!app.requestSingleInstanceLock()) {
     library = new Library(
       () => captureFolder(settings),
       () => join(app.getPath('userData'), 'Captures'),
+      () => settings.blockedFolder,
+      (dir) => {
+        if (settings.blockedFolder === dir) return
+        settings = { ...settings, blockedFolder: dir }
+        saveSettings(settings)
+      },
       () => editor?.webContents.send('library:changed')
     )
     registerIpc()

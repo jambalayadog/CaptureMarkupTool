@@ -34,6 +34,8 @@ export interface Settings {
   autoSaveCaptures: boolean
   /** Library folder; empty means the default (Pictures\Markup). */
   captureFolder: string
+  /** Library folder Windows refused to let Markup write to (managed by the app). */
+  blockedFolder: string
 }
 
 /** An image in the capture library folder. */
@@ -46,8 +48,13 @@ export interface LibraryItem {
 }
 
 export interface LibraryListing {
+  /** Where new captures are being saved. */
   folder: string
   items: LibraryItem[]
+  /** The chosen folder, if Windows is blocking it (captures then go to `folder`). */
+  blocked: string | null
+  /** This app's executable, which is what needs allowing in Windows Security. */
+  exePath: string
 }
 
 export interface EditorApi {
@@ -76,6 +83,8 @@ export interface EditorApi {
   trashFile(path: string): Promise<boolean>
   startDrag(path: string): void
   openLibraryFolder(): void
+  /** Test the chosen library folder again (after allowing Markup in Windows Security). */
+  retryLibraryFolder(): Promise<{ ok: boolean; folder: string }>
   onLibraryChanged(cb: () => void): () => void
   chooseFolder(current: string): Promise<string | null>
 }

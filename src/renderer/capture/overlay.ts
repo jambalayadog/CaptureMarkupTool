@@ -49,8 +49,17 @@ function show(p: CaptureShowPayload): void {
   dragStart = null
   active = true
   draw()
-  // Wait until the new frame is actually presented before the window is shown.
-  requestAnimationFrame(() => requestAnimationFrame(() => window.captureApi.ready()))
+  // Wait until the new frame is presented before the window is shown, but don't
+  // rely on animation frames alone: a hidden page (e.g. one that just reloaded)
+  // may not get any, and then the capture would never appear.
+  let sent = false
+  const ready = (): void => {
+    if (sent) return
+    sent = true
+    window.captureApi.ready()
+  }
+  requestAnimationFrame(() => requestAnimationFrame(ready))
+  setTimeout(ready, 120)
 }
 
 function hide(): void {
@@ -232,6 +241,12 @@ function finish(rect: R | null): void {
   window.captureApi.finish(rect)
 }
 
+/** Esc / right-click always cancel, even if this page never got its screenshot. */
+function cancel(): void {
+  active = false
+  window.captureApi.finish(null)
+}
+
 window.addEventListener('mousemove', (e) => {
   mouse = toShot(e)
   requestDraw()
@@ -242,9 +257,8 @@ window.addEventListener('mouseleave', () => {
   requestDraw()
 })
 window.addEventListener('mousedown', (e) => {
-  if (!active) return
-  if (e.button === 2) return finish(null)
-  if (e.button !== 0) return
+  if (e.button === 2) return cancel()
+  if (!active || e.button !== 0) return
   mouse = toShot(e)
   dragStart = { ...mouse }
   requestDraw()
@@ -258,9 +272,8 @@ window.addEventListener('mouseup', (e) => {
 })
 window.addEventListener('contextmenu', (e) => e.preventDefault())
 window.addEventListener('keydown', (e) => {
-  if (!active) return
-  if (e.key === 'Escape') finish(null)
-  else if (e.key === 'Enter') finish({ x: 0, y: 0, w: shot.width, h: shot.height })
+  if (e.key === 'Escape') return cancel()
+  if (active && e.key === 'Enter') finish({ x: 0, y: 0, w: shot.width, h: shot.height })
 })
 window.addEventListener('resize', requestDraw)
 

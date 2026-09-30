@@ -6,7 +6,10 @@ interface Overlay {
   win: BrowserWindow
   display: Display
   image: NativeImage | null
+  /** What the page was last asked to show (re-sent if the page reloads mid-capture). */
+  payload: CaptureShowPayload | null
   loaded: Promise<void>
+  shown: boolean
 }
 
 export interface CaptureHooks {
@@ -18,14 +21,23 @@ export interface CaptureHooks {
   onCaptured(png: Buffer): void
 }
 
+/** An overlay that hasn't said it's ready by then is shown anyway (it paints once visible). */
+const READY_TIMEOUT = 1500
+const LOAD_TIMEOUT = 8000
+const GRAB_TIMEOUT = 10000
+
 /**
  * Freezes every display, shows a full-screen overlay window per display, and
  * lets the user pick a region, a window, or a whole screen. Overlay windows are
  * kept alive (hidden) between captures so the next capture opens instantly.
+ *
+ * Every capture is a numbered session so that a stuck or superseded capture can
+ * never leave the manager wedged: the next press starts over.
  */
 export class CaptureManager {
   private overlays = new Map<number, Overlay>()
   private active = false
+  private session = 0
   private restoreOnCancel = false
   /** Dev-only: finish automatically with this rect on the primary display. */
   private autoFinish: { x: number; y: number; w: number; h: number } | null = null
@@ -43,14 +55,22 @@ export class CaptureManager {
   }
 
   async start(hideEditor: boolean, autoFinish: { x: number; y: number; w: number; h: number } | null = null): Promise<void> {
-    if (this.active) return
+    if (this.active) {
+      // A second press while the overlay is up does nothing...
+      if (this.anyShown()) return
+      // ...but if nothing is on screen, the previous capture got stuck: start over.
+      console.warn('[capture] the previous capture never appeared; starting over')
+      this.abort(false)
+    }
+    const session = ++this.session
     this.active = true
     this.autoFinish = autoFinish
     try {
       this.restoreOnCancel = hideEditor ? await this.hooks.hideEditor() : false
       const displays = screen.getAllDisplays()
       const windows = listWindows()
-      const images = await grabDisplays(displays)
+      const images = await withTimeout(grabDisplays(displays), GRAB_TIMEOUT, 'grabbing the screens timed out')
+      if (session !== this.session) return
       const cursor = screen.getCursorScreenPoint()
       let shown = 0
       for (const d of displays) {
@@ -58,11 +78,13 @@ export class CaptureManager {
         if (!img) continue
         const ov = this.overlayFor(d)
         ov.image = img
-        await ov.loaded
+        ov.shown = false
+        await withTimeout(ov.loaded, LOAD_TIMEOUT, 'the capture overlay did not load')
+        if (session !== this.session) return
         const size = img.getSize()
         const b = d.bounds
         const onThis = cursor.x >= b.x && cursor.x < b.x + b.width && cursor.y >= b.y && cursor.y < b.y + b.height
-        const payload: CaptureShowPayload = {
+        ov.payload = {
           bitmap: img.toBitmap(),
           width: size.width,
           height: size.height,
@@ -71,15 +93,36 @@ export class CaptureManager {
             ? { x: ((cursor.x - b.x) * size.width) / b.width, y: ((cursor.y - b.y) * size.height) / b.height }
             : null
         }
-        ov.win.webContents.send('capture:show', payload)
+        ov.win.webContents.send('capture:show', ov.payload)
         shown++
       }
       if (!shown) throw new Error('No displays could be captured')
+      setTimeout(() => {
+        if (session !== this.session || !this.active || this.autoFinish) return
+        for (const ov of this.overlays.values()) {
+          if (ov.payload && !ov.shown) {
+            console.warn('[capture] an overlay was slow to get ready; showing it anyway')
+            this.showOverlay(ov)
+          }
+        }
+      }, READY_TIMEOUT)
     } catch (err) {
       console.error('[capture] failed:', err)
-      this.active = false
-      if (this.restoreOnCancel) this.hooks.restoreEditor()
+      if (session === this.session) this.abort(true)
     }
+  }
+
+  private anyShown(): boolean {
+    for (const ov of this.overlays.values()) if (!ov.win.isDestroyed() && ov.win.isVisible()) return true
+    return false
+  }
+
+  /** Cancel the current capture (optionally bringing the editor back). */
+  private abort(restoreEditor: boolean): void {
+    this.session++
+    this.hideAll()
+    this.active = false
+    if (restoreEditor && this.restoreOnCancel) this.hooks.restoreEditor()
   }
 
   private find(sender: WebContents): Overlay | undefined {
@@ -91,11 +134,17 @@ export class CaptureManager {
 
   private onReady(sender: WebContents): void {
     const ov = this.find(sender)
-    if (!ov || !this.active) return
+    if (!ov || !this.active || !ov.payload) return
     if (this.autoFinish) {
       if (ov.display.id === screen.getPrimaryDisplay().id) this.finish(sender, this.autoFinish)
       return
     }
+    this.showOverlay(ov)
+  }
+
+  private showOverlay(ov: Overlay): void {
+    if (ov.win.isDestroyed() || ov.shown) return
+    ov.shown = true
     ov.win.setBounds(ov.display.bounds)
     ov.win.setAlwaysOnTop(true, 'screen-saver')
     ov.win.show()
@@ -119,6 +168,7 @@ export class CaptureManager {
       const h = Math.min(size.height - y, Math.round(rect.h))
       if (w > 0 && h > 0) png = ov.image.crop({ x, y, width: w, height: h }).toPNG()
     }
+    this.session++
     this.hideAll()
     this.active = false
     if (png) this.hooks.onCaptured(png)
@@ -131,6 +181,8 @@ export class CaptureManager {
       ov.win.webContents.send('capture:hide')
       ov.win.hide()
       ov.image = null
+      ov.payload = null
+      ov.shown = false
     }
   }
 
@@ -138,6 +190,16 @@ export class CaptureManager {
     if (this.active) return
     for (const ov of this.overlays.values()) if (!ov.win.isDestroyed()) ov.win.destroy()
     this.overlays.clear()
+  }
+
+  /** Forget a broken overlay (it's recreated next time) and cancel any capture using it. */
+  private drop(ov: Overlay, why: string): void {
+    if (this.overlays.get(ov.display.id) === ov) this.overlays.delete(ov.display.id)
+    if (!ov.win.isDestroyed()) ov.win.destroy()
+    if (this.active) {
+      console.warn(`[capture] overlay failed (${why}); cancelling the capture`)
+      this.abort(true)
+    }
   }
 
   private overlayFor(d: Display): Overlay {
@@ -172,11 +234,29 @@ export class CaptureManager {
       }
     })
     const loaded = new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
+    const ov: Overlay = { win, display: d, image: null, payload: null, loaded, shown: false }
+    // If the page reloads mid-capture (e.g. a dev hot reload), hand it the screenshot again.
+    win.webContents.on('did-finish-load', () => {
+      if (this.active && ov.payload && !win.isDestroyed()) win.webContents.send('capture:show', ov.payload)
+    })
+    win.webContents.on('render-process-gone', (_e, details) => this.drop(ov, details.reason))
+    win.webContents.on('did-fail-load', (_e, code, desc, _url, isMainFrame) => {
+      if (isMainFrame && code !== -3) this.drop(ov, desc) // -3: aborted by a newer navigation
+    })
     this.hooks.loadPage(win, 'capture')
-    const ov: Overlay = { win, display: d, image: null, loaded }
     this.overlays.set(d.id, ov)
     return ov
   }
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(what)), ms)
+    })
+  ]).finally(() => clearTimeout(timer))
 }
 
 async function grabDisplays(displays: Display[]): Promise<Map<number, NativeImage>> {
