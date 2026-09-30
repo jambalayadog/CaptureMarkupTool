@@ -411,6 +411,10 @@ function SettingsDialog(): React.JSX.Element {
             <input type="checkbox" checked={s.closeToTray} onChange={(e) => setS({ ...s, closeToTray: e.target.checked })} />
             Closing the window keeps the app running in the tray
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.openAtLogin} onChange={(e) => setS({ ...s, openAtLogin: e.target.checked })} />
+            Start with Windows (in the tray, ready for the capture hotkey)
+          </label>
           {error && <p className="form-error">{error}</p>}
         </>
       )}

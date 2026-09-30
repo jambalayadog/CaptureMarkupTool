@@ -12,7 +12,15 @@ A layered screenshot and image markup editor for Windows, somewhere between Snip
 - **Layers**: pixel layers and annotation layers, with opacity, blend modes, lock, reorder, merge down, rasterize and flatten.
 - Tabs for multiple images, full undo/redo, and drag and drop.
 
-## Running
+## Install
+
+Windows 10 or 11 (64-bit). Download `Capture Markup Tool Setup <version>.exe` from the [Releases page](https://github.com/jambalayadog/CaptureMarkupTool/releases) and run it. It installs just for you, with no admin prompt, and adds a Start menu shortcut. Uninstall it from *Settings → Apps* like anything else.
+
+The installer isn't code-signed, so Windows SmartScreen will say it *protected your PC* the first time. Click **More info → Run anyway**.
+
+Closing the window keeps the app in the system tray so the capture hotkey keeps working. Quit from the tray icon's menu. *File → Settings* has **Start with Windows**, which starts it quietly in the tray when you sign in.
+
+## Running from source
 
 ```bash
 npm install
@@ -22,7 +30,9 @@ npm run typecheck
 npm run dist       # Windows installer in dist/
 ```
 
-To start the dev app without a terminal window, double-click `scripts\start-dev.vbs` (output goes to `dev.log`). Launching it through Explorer also avoids a quirk: apps started from inside another packaged app (such as the Claude desktop app) have their AppData writes silently redirected into that app's private folder.
+To start the dev app without a terminal window, double-click `scripts\start-dev.vbs` (output goes to `dev.log`). If the app is already running, it just brings the window up. Launching it through Explorer also avoids a quirk: apps started from inside another packaged app (such as the Claude desktop app) have their AppData writes silently redirected into that app's private folder.
+
+The dev build can be pinned to the taskbar and set to start with Windows too. Both go through `start-dev.vbs`, so they keep running your latest source.
 
 In development, **F12** opens DevTools and **F5** reloads. By default, closing the window hides the app to the tray so the capture hotkey keeps working. Use the tray menu's **Quit** item, or turn that off in *File → Settings*. Settings and caches live in `%APPDATA%\CaptureMarkupTool`.
 

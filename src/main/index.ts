@@ -9,6 +9,7 @@ import { captureFolder, defaultCaptureFolder, loadSettings, saveSettings } from 
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
 
 const ICON = join(__dirname, '../../resources/icon.png')
+const APP_ID = 'com.jwatt.capturemarkuptool'
 const PRELOAD = join(__dirname, '../preload/index.js')
 const OPENABLE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.imk'])
 const TITLEBAR = '#18191c'
@@ -18,7 +19,7 @@ const APP_NAME = 'Capture Markup Tool'
 // lock lives in userData). %APPDATA%\CaptureMarkupTool holds settings and caches.
 app.setName(APP_NAME)
 app.setPath('userData', join(app.getPath('appData'), 'CaptureMarkupTool'))
-if (process.platform === 'win32') app.setAppUserModelId('com.jwatt.capturemarkuptool')
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID)
 
 let editor: BrowserWindow | null = null
 let editorReady = false
@@ -29,6 +30,8 @@ let settings: Settings
 let capture: CaptureManager
 let captureSeq = 0
 let library: Library
+/** Started by Windows at sign-in: stay in the tray until asked for. */
+const startHidden = process.argv.includes('--hidden')
 /** Messages for the editor page that arrived before it finished loading. */
 const outbox: Array<[string, unknown]> = []
 
@@ -38,7 +41,36 @@ function loadPage(win: BrowserWindow, page: 'index' | 'capture'): void {
   else void win.loadFile(join(__dirname, `../renderer/${page}.html`))
 }
 
-function createEditor(): void {
+/**
+ * How Windows should start the app again: from a pinned taskbar button, or at sign-in.
+ * In development that's the no-console launcher, since bare electron.exe (what Windows
+ * would otherwise pin) opens Electron's default app instead of this one.
+ */
+function launcher(): { exe: string; args: string[]; icon: string } {
+  // args are unquoted: setLoginItemSettings quotes them itself
+  if (app.isPackaged) return { exe: process.execPath, args: [], icon: process.execPath }
+  return {
+    exe: join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'wscript.exe'),
+    args: [join(app.getAppPath(), 'scripts', 'start-dev.vbs')],
+    icon: join(__dirname, '../../resources/icon.ico')
+  }
+}
+
+function openAtLogin(): boolean {
+  if (process.platform !== 'win32') return false
+  const { exe, args } = launcher()
+  const s = app.getLoginItemSettings({ path: exe, args: [...args, '--hidden'] })
+  // executableWillLaunchAtLogin is false when it's been turned off in Task Manager's Startup apps
+  return s.openAtLogin && s.executableWillLaunchAtLogin
+}
+
+function setOpenAtLogin(on: boolean): void {
+  if (process.platform !== 'win32') return
+  const { exe, args } = launcher()
+  app.setLoginItemSettings({ openAtLogin: on, path: exe, args: [...args, '--hidden'] })
+}
+
+function createEditor(show = true): void {
   editorReady = false
   editor = new BrowserWindow({
     width: 1480,
@@ -53,7 +85,18 @@ function createEditor(): void {
     titleBarOverlay: { color: TITLEBAR, symbolColor: '#c9ccd1', height: 36 },
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true }
   })
-  editor.once('ready-to-show', () => editor?.show())
+  if (process.platform === 'win32') {
+    // What a pinned taskbar button shows and runs (otherwise Windows pins electron.exe).
+    const { exe, args, icon } = launcher()
+    editor.setAppDetails({
+      appId: APP_ID,
+      appIconPath: icon,
+      appIconIndex: 0,
+      relaunchCommand: [exe, ...args].map((a) => `"${a}"`).join(' '),
+      relaunchDisplayName: APP_NAME
+    })
+  }
+  if (show) editor.once('ready-to-show', () => editor?.show())
   if (!app.isPackaged) {
     // The app menu is hidden, so wire up dev tools and reload by hand in development.
     editor.webContents.on('before-input-event', (_e, input) => {
@@ -258,13 +301,15 @@ function registerIpc(): void {
     dirty = v
   })
 
-  ipcMain.handle('settings:get', () => settings)
+  // openAtLogin lives in the Windows registry, so always report what's really there
+  ipcMain.handle('settings:get', () => ({ ...settings, openAtLogin: openAtLogin() }))
 
   ipcMain.handle('settings:set', (_e, next: Settings) => {
     if (next.hotkey !== settings.hotkey && !registerHotkey(next.hotkey)) {
       registerHotkey(settings.hotkey)
       return { ok: false, error: `Couldn't register ${prettyAccelerator(next.hotkey)}. Another app may already be using it.` }
     }
+    if (next.openAtLogin !== openAtLogin()) setOpenAtLogin(next.openAtLogin)
     const folderChanged = next.captureFolder !== settings.captureFolder
     // blockedFolder is the app's own bookkeeping; don't let a stale copy from the page overwrite it
     settings = { ...next, blockedFolder: settings.blockedFolder }
@@ -334,12 +379,18 @@ function registerIpc(): void {
   })
 }
 
+// The app never navigates or opens windows itself; don't let a stray dropped link do it either.
+app.on('web-contents-created', (_e, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  contents.on('will-navigate', (e) => e.preventDefault())
+})
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', (_e, argv) => {
     handleArgv(argv)
-    if (!argv.some((a) => a.startsWith('--capture') || a.startsWith('--debug-shot='))) showEditor()
+    if (!argv.some((a) => a === '--hidden' || a.startsWith('--capture') || a.startsWith('--debug-shot='))) showEditor()
   })
 
   app.whenReady().then(() => {
@@ -396,7 +447,8 @@ if (!app.requestSingleInstanceLock()) {
     tray.on('click', showEditor)
     updateTrayMenu()
     if (!registerHotkey(settings.hotkey)) console.warn(`[hotkey] could not register ${settings.hotkey}`)
-    createEditor()
+    // Created hidden at sign-in too, so the first capture opens without a wait.
+    createEditor(!startHidden)
     handleArgv(process.argv)
     capture.prewarm()
   })
