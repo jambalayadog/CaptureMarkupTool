@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { decodeImage } from '../core/io'
 import { api, browserCapture, fileToOpened } from '../core/platform'
 import { CanvasView } from './CanvasView'
+import { CaptureStrip } from './CaptureStrip'
 import { ColorPanel } from './ColorPanel'
 import { Dialogs } from './Dialogs'
 import { LayersPanel } from './LayersPanel'
@@ -58,9 +59,32 @@ export function App(): React.JSX.Element {
     window.addEventListener('paste', paste)
     window.addEventListener('blur', blur)
     window.addEventListener('beforeunload', unload)
-    const offCapture = api?.onCapture(async ({ png, name }) => {
+    // Auto-saved captures get linked to their library file (so Ctrl+S updates it).
+    // The saved path can arrive before or after the image is decoded, so pair them by id.
+    const captureDocs = new Map<number, string>()
+    const savedPaths = new Map<number, string>()
+    const link = (id: number): void => {
+      const docId = captureDocs.get(id)
+      const path = savedPaths.get(id)
+      if (!docId || !path) return
+      captureDocs.delete(id)
+      savedPaths.delete(id)
+      const doc = editor.docs.find((d) => d.id === docId)
+      if (!doc || doc.filePath || doc.fileHandle) return
+      doc.filePath = path
+      doc.fileKind = 'png'
+      editor.emit()
+    }
+    const offCapture = api?.onCapture(async ({ png, name, id }) => {
       editor.openCanvas(await decodeImage(png), name, { layerName: 'Screenshot' })
+      if (editor.d) captureDocs.set(id, editor.d.id)
+      link(id)
     })
+    const offSaved = api?.onCaptureSaved(({ id, path }) => {
+      savedPaths.set(id, path)
+      link(id)
+    })
+    const offNotify = api?.onNotify((text) => editor.notify(text, 12000))
     const offOpen = api?.onOpenFiles((files) => void editor.openFiles(files))
     api?.ready()
     return () => {
@@ -71,6 +95,8 @@ export function App(): React.JSX.Element {
       window.removeEventListener('beforeunload', unload)
       window.removeEventListener('click', click, true)
       offCapture?.()
+      offSaved?.()
+      offNotify?.()
       offOpen?.()
     }
   }, [ed])
@@ -87,7 +113,10 @@ export function App(): React.JSX.Element {
       {ed.d && <OptionsBar />}
       <div className="main">
         {ed.d && <ToolRail />}
-        <div className="center">{ed.d ? <CanvasView /> : <Welcome />}</div>
+        <div className="center">
+          <div className="stage">{ed.d ? <CanvasView /> : <Welcome />}</div>
+          <CaptureStrip />
+        </div>
         {ed.d && (
           <aside className="side">
             <ColorPanel />

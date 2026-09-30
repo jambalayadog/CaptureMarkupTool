@@ -11,6 +11,16 @@ export interface OpenedFile {
 export interface CaptureResult {
   png: Uint8Array
   name: string
+  /** Always null on arrival; the library file follows in a CaptureSaved message. */
+  path: string | null
+  /** Matches the capture to its later CaptureSaved message. */
+  id: number
+}
+
+/** A capture finished saving to the library. */
+export interface CaptureSaved {
+  id: number
+  path: string
 }
 
 export interface Settings {
@@ -20,6 +30,24 @@ export interface Settings {
   copyOnCapture: boolean
   /** Closing the editor window hides it to the tray instead of quitting. */
   closeToTray: boolean
+  /** Save every capture to the library folder automatically. */
+  autoSaveCaptures: boolean
+  /** Library folder; empty means the default (Pictures\Markup). */
+  captureFolder: string
+}
+
+/** An image in the capture library folder. */
+export interface LibraryItem {
+  path: string
+  name: string
+  mtime: number
+  /** Small JPEG data URL (empty if no thumbnail could be made). */
+  thumb: string
+}
+
+export interface LibraryListing {
+  folder: string
+  items: LibraryItem[]
 }
 
 export interface EditorApi {
@@ -30,6 +58,9 @@ export interface EditorApi {
   readClipboardImage(): Promise<Uint8Array | null>
   startCapture(): void
   onCapture(cb: (r: CaptureResult) => void): () => void
+  onCaptureSaved(cb: (r: CaptureSaved) => void): () => void
+  /** Messages from the main process to show the user. */
+  onNotify(cb: (text: string) => void): () => void
   onOpenFiles(cb: (files: OpenedFile[]) => void): () => void
   ready(): void
   setDirty(dirty: boolean): void
@@ -37,6 +68,16 @@ export interface EditorApi {
   setSettings(s: Settings): Promise<{ ok: boolean; error?: string }>
   pathForFile(f: File): string
   quit(): void
+  // capture library
+  listLibrary(): Promise<LibraryListing>
+  readFile(path: string): Promise<OpenedFile | null>
+  copyFile(path: string): Promise<boolean>
+  revealFile(path: string): void
+  trashFile(path: string): Promise<boolean>
+  startDrag(path: string): void
+  openLibraryFolder(): void
+  onLibraryChanged(cb: () => void): () => void
+  chooseFolder(current: string): Promise<string | null>
 }
 
 /** A window rectangle, in the overlay's screenshot pixel space. */

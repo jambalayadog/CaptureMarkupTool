@@ -1,5 +1,7 @@
 import {
   ArrowDownToLine,
+  ArrowLeftRight,
+  ArrowUpDown,
   ArrowUpToLine,
   Bold,
   Copy,
@@ -7,15 +9,21 @@ import {
   Minus,
   Plus,
   Redo2,
+  RotateCw,
   Save,
+  Square,
+  SquaresIntersect,
+  SquaresSubtract,
+  SquaresUnite,
   Trash,
   Undo2
 } from 'lucide-react'
 import { FONTS, HIGHLIGHT_COLORS } from '../core/constants'
 import type { Editor } from '../core/editor'
 import { cropToSelection } from '../core/imageOps'
-import type { Head, ToolOptions, VObj } from '../core/types'
+import type { Head, SelectMode, ToolOptions, VObj } from '../core/types'
 import { applyCrop, resetCrop } from '../tools/region'
+import { adjustTransform, finishTransform } from '../tools/transform'
 import { Divider, IconBtn, Num, Seg, Sel, Toggle } from './controls'
 import { useEditor } from './state'
 import { TOOL_META } from './tools'
@@ -209,22 +217,12 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           All layers
         </Toggle>
       )
-    case 'marquee': {
-      const s = ed.d?.selection
-      if (!s) return <span className="opt-hint">Drag to select an area of pixels</span>
-      return (
-        <>
-          <span className="opt-value">
-            {s.w} × {s.h} at {s.x}, {s.y}
-          </span>
-          <button className="btn" onClick={() => cropToSelection(ed)}>Crop to selection</button>
-          <button className="btn" onClick={() => void ed.copy()}>Copy</button>
-          <button className="btn" onClick={() => ed.fillSelection()}>Fill</button>
-          <button className="btn" onClick={() => ed.clearSelectionPixels()}>Clear</button>
-          <button className="btn" onClick={() => ed.deselect()}>Deselect</button>
-        </>
-      )
-    }
+    case 'marquee':
+    case 'lasso':
+    case 'wand':
+      return <SelectionOptions ed={ed} tool={set} />
+    case 'transform':
+      return <TransformOptions ed={ed} />
     case 'crop': {
       const d = ed.d!
       const r = d.live.crop ?? { x: 0, y: 0, w: d.width, h: d.height }
@@ -251,6 +249,93 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
     default:
       return null
   }
+}
+
+const SELECT_MODES: { value: SelectMode; label: React.ReactNode; title: string }[] = [
+  { value: 'replace', label: <Square size={13} />, title: 'New selection' },
+  { value: 'add', label: <SquaresUnite size={14} />, title: 'Add to selection (hold Shift)' },
+  { value: 'subtract', label: <SquaresSubtract size={14} />, title: 'Subtract from selection (hold Alt)' },
+  { value: 'intersect', label: <SquaresIntersect size={14} />, title: 'Intersect with selection (hold Shift+Alt)' }
+]
+
+function SelectionOptions({ ed, tool }: { ed: Editor; tool: string }): React.JSX.Element {
+  const o = ed.opts
+  const s = ed.d?.selection
+  return (
+    <>
+      <Seg value={o.selectMode} options={SELECT_MODES} onChange={(v) => ed.setOpt('selectMode', v)} />
+      {tool === 'lasso' && (
+        <Toggle active={o.lassoAntiAlias} title="Smooth selection edges (off for hard pixel edges)" onClick={() => ed.setOpt('lassoAntiAlias', !o.lassoAntiAlias)}>
+          Anti-alias
+        </Toggle>
+      )}
+      {tool === 'wand' && (
+        <>
+          <Num label="Tolerance" value={o.wandTolerance} min={0} max={255} onChange={(v) => ed.setOpt('wandTolerance', v)} />
+          <Toggle active={o.wandContiguous} title="Only connected pixels" onClick={() => ed.setOpt('wandContiguous', !o.wandContiguous)}>
+            Contiguous
+          </Toggle>
+          <Toggle active={o.wandSampleMerged} title="Use all visible layers" onClick={() => ed.setOpt('wandSampleMerged', !o.wandSampleMerged)}>
+            All layers
+          </Toggle>
+        </>
+      )}
+      {s && (
+        <>
+          <Divider />
+          <span className="opt-value">
+            {s.w} × {s.h}
+          </span>
+          <button className="btn" onClick={() => ed.setTool('transform')} title="Free transform the selected pixels (Ctrl+T)">
+            Transform
+          </button>
+          <button className="btn" onClick={() => cropToSelection(ed)}>Crop</button>
+          <button className="btn" onClick={() => ed.fillSelection()}>Fill</button>
+          <button className="btn" onClick={() => ed.clearSelectionPixels()}>Clear</button>
+          <button className="btn" onClick={() => ed.invertSelection()} title="Invert selection (Ctrl+Shift+I)">
+            Invert
+          </button>
+          <button className="btn" onClick={() => ed.deselect()} title="Deselect (Ctrl+D)">
+            Deselect
+          </button>
+        </>
+      )}
+    </>
+  )
+}
+
+function TransformOptions({ ed }: { ed: Editor }): React.JSX.Element {
+  const t = ed.d?.live.transform
+  if (!t) return <span className="opt-hint">Pick a pixel layer (or select some pixels), then press Ctrl+T</span>
+  const pct = (s: number): number => Math.round(Math.abs(s) * 1000) / 10
+  let deg = ((t.angle * 180) / Math.PI) % 360
+  if (deg > 180) deg -= 360
+  if (deg <= -180) deg += 360
+  return (
+    <>
+      <Num label="W" value={pct(t.sx)} min={1} max={10000} slider={false} suffix="%" onChange={(v) => adjustTransform(ed, { sx: (Math.sign(t.sx) || 1) * (v / 100) })} />
+      <Num label="H" value={pct(t.sy)} min={1} max={10000} slider={false} suffix="%" onChange={(v) => adjustTransform(ed, { sy: (Math.sign(t.sy) || 1) * (v / 100) })} />
+      <Num label="Angle" value={Math.round(deg * 10) / 10} min={-180} max={180} slider={false} suffix="°" onChange={(v) => adjustTransform(ed, { angle: (v * Math.PI) / 180 })} />
+      <IconBtn title="Flip horizontally" onClick={() => adjustTransform(ed, { sx: -t.sx })}>
+        <ArrowLeftRight size={15} />
+      </IconBtn>
+      <IconBtn title="Flip vertically" onClick={() => adjustTransform(ed, { sy: -t.sy })}>
+        <ArrowUpDown size={15} />
+      </IconBtn>
+      <IconBtn title="Rotate 90° clockwise" onClick={() => adjustTransform(ed, { angle: t.angle + Math.PI / 2 })}>
+        <RotateCw size={15} />
+      </IconBtn>
+      <Toggle active={t.smooth} title="Smooth resampling (turn off to keep hard pixels)" onClick={() => adjustTransform(ed, { smooth: !t.smooth })}>
+        Smooth
+      </Toggle>
+      <button className="btn primary" onClick={() => finishTransform(ed, true)}>
+        Apply
+      </button>
+      <button className="btn" onClick={() => finishTransform(ed, false)}>
+        Cancel
+      </button>
+    </>
+  )
 }
 
 export function ZoomControls({ ed }: { ed: Editor }): React.JSX.Element {

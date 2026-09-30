@@ -508,7 +508,7 @@ body.electron .titlebar {
 
 .tool {
   width: 34px;
-  height: 32px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -531,8 +531,15 @@ body.electron .titlebar {
 .center {
   flex: 1;
   min-width: 0;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--bg0);
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
 }
 
 .canvas-wrap {
@@ -921,6 +928,138 @@ canvas.view {
   gap: 2px;
   padding-top: 6px;
   border-top: 1px solid var(--line);
+}
+
+/* ---- recent captures strip ---------------------------------------------- */
+
+.strip {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border-top: 1px solid var(--line);
+}
+
+.strip-head {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 6px 0 4px;
+}
+
+.strip-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.strip-toggle:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.strip-count {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg4);
+  color: var(--text2);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.icon-btn.small {
+  width: 24px;
+  height: 22px;
+}
+
+.strip-body {
+  display: flex;
+  gap: 8px;
+  height: 82px;
+  padding: 2px 10px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.strip-empty {
+  align-self: center;
+  color: var(--text3);
+  padding-left: 4px;
+}
+
+.shot {
+  position: relative;
+  flex: none;
+  height: 70px;
+  min-width: 70px;
+  max-width: 140px;
+  padding: 0;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  background: repeating-conic-gradient(#d9dce1 0% 25%, #fff 0% 50%) 0 0 / 8px 8px;
+  overflow: hidden;
+}
+
+.shot img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 140px;
+  object-fit: cover;
+}
+
+.shot:hover {
+  border-color: var(--accent);
+}
+
+.shot.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.shot-time {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(15, 16, 20, 0.78);
+  color: #fff;
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.shot-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 100%;
+  color: var(--text3);
+}
+
+.context-menu {
+  position: fixed;
+  min-width: 190px;
+}
+
+.folder-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text2);
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-size: 11.5px;
 }
 
 /* ---- status bar ----------------------------------------------------------- */

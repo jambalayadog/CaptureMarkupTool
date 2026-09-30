@@ -15,13 +15,24 @@ const api: EditorApi = {
   readClipboardImage: () => ipcRenderer.invoke('clipboard:readImage'),
   startCapture: () => ipcRenderer.send('capture:start'),
   onCapture: (cb) => listen('editor:capture', cb),
+  onCaptureSaved: (cb) => listen('editor:captureSaved', cb),
+  onNotify: (cb) => listen('editor:notify', cb),
   onOpenFiles: (cb) => listen('editor:openFiles', cb),
   ready: () => ipcRenderer.send('editor:ready'),
   setDirty: (dirty) => ipcRenderer.send('app:setDirty', dirty),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (s) => ipcRenderer.invoke('settings:set', s),
   pathForFile: (f) => webUtils.getPathForFile(f),
-  quit: () => ipcRenderer.send('app:quit')
+  quit: () => ipcRenderer.send('app:quit'),
+  listLibrary: () => ipcRenderer.invoke('library:list'),
+  readFile: (path) => ipcRenderer.invoke('library:read', path),
+  copyFile: (path) => ipcRenderer.invoke('library:copy', path),
+  revealFile: (path) => ipcRenderer.send('library:reveal', path),
+  trashFile: (path) => ipcRenderer.invoke('library:trash', path),
+  startDrag: (path) => ipcRenderer.send('library:startDrag', path),
+  openLibraryFolder: () => ipcRenderer.send('library:openFolder'),
+  onLibraryChanged: (cb) => listen('library:changed', () => cb()),
+  chooseFolder: (current) => ipcRenderer.invoke('settings:chooseFolder', current)
 }
 
 const captureApi: CaptureApi = {

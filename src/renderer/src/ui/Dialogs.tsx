@@ -354,6 +354,31 @@ function SettingsDialog(): React.JSX.Element {
           </div>
           <p className="form-note">Works from anywhere while Markup is running (it lives in the system tray).</p>
           <label className="check">
+            <input type="checkbox" checked={s.autoSaveCaptures} onChange={(e) => setS({ ...s, autoSaveCaptures: e.target.checked })} />
+            Save every capture to the library automatically
+          </label>
+          <div className="form-row">
+            <span className="form-label">Library folder</span>
+            <span className="folder-path" title={s.captureFolder || 'Pictures\\Markup'}>
+              {s.captureFolder || 'Pictures\\Markup (default)'}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={async () => {
+                const dir = await api!.chooseFolder(s.captureFolder)
+                if (dir) setS({ ...s, captureFolder: dir })
+              }}
+            >
+              Change…
+            </button>
+            {s.captureFolder && (
+              <button type="button" className="btn" onClick={() => setS({ ...s, captureFolder: '' })}>
+                Default
+              </button>
+            )}
+          </div>
+          <label className="check">
             <input type="checkbox" checked={s.copyOnCapture} onChange={(e) => setS({ ...s, copyOnCapture: e.target.checked })} />
             Also copy every capture to the clipboard
           </label>
@@ -376,6 +401,9 @@ const SHORTCUTS: [string, string][] = [
   ['Duplicate', 'Ctrl+J, or Alt-drag'],
   ['Delete', 'Del'],
   ['Select all / Deselect', 'Ctrl+A / Ctrl+D'],
+  ['Invert selection', 'Ctrl+Shift+I'],
+  ['Add to / subtract from selection', 'Hold Shift / Alt'],
+  ['Free transform', 'Ctrl+T (Enter applies, Esc cancels)'],
   ['Nudge', 'Arrow keys (Shift ×10)'],
   ['Brush / stroke size', '[ and ]'],
   ['Swap colours / Reset colours', 'X / D'],

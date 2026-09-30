@@ -6,7 +6,16 @@ import type { Settings } from '../shared/api'
 export const DEFAULT_SETTINGS: Settings = {
   hotkey: 'CommandOrControl+PrintScreen',
   copyOnCapture: false,
-  closeToTray: true
+  closeToTray: true,
+  autoSaveCaptures: true,
+  captureFolder: ''
+}
+
+/** Where captures are saved. MARKUP_CAPTURE_DIR overrides it in development (for tests). */
+export function captureFolder(s: Settings): string {
+  const override = process.env['MARKUP_CAPTURE_DIR']
+  if (override && !app.isPackaged) return override
+  return s.captureFolder || join(app.getPath('pictures'), 'Markup')
 }
 
 const file = (): string => join(app.getPath('userData'), 'settings.json')

@@ -37,7 +37,12 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   fillTolerance: 24,
   fillContiguous: true,
   fillSampleMerged: false,
-  sampleMerged: true
+  sampleMerged: true,
+  selectMode: 'replace',
+  lassoAntiAlias: true,
+  wandTolerance: 32,
+  wandContiguous: true,
+  wandSampleMerged: true
 }
 
 export const HIGHLIGHT_COLORS = ['#ffe14d', '#8cf27a', '#ff8fd8', '#7fd8ff', '#ffb34d']
@@ -85,6 +90,8 @@ export const PALETTES: Record<string, string[]> = {
 export const TOOL_KEYS: Partial<Record<string, ToolId>> = {
   v: 'select',
   m: 'marquee',
+  q: 'lasso',
+  w: 'wand',
   c: 'crop',
   a: 'arrow',
   l: 'line',
@@ -109,3 +116,6 @@ export const ZOOM_STEPS = [
 
 export const VECTOR_TOOLS: ToolId[] = ['arrow', 'line', 'rect', 'ellipse', 'text', 'callout', 'step', 'highlight', 'redact']
 export const PAINT_TOOLS: ToolId[] = ['brush', 'pencil', 'eraser', 'fill']
+export const SELECT_TOOLS: ToolId[] = ['marquee', 'lasso', 'wand']
+
+export const ACCENT = '#5b8cff'

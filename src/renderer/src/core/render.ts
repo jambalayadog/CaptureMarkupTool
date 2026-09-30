@@ -1,6 +1,7 @@
 import type { DocState } from './doc'
-import type { Layer, RasterLayer, Rect } from './types'
+import type { Layer, RasterLayer, Selection, TransformState } from './types'
 import { drawObject } from './objects'
+import { clearInside, keepInside } from './selection'
 import { ctx2d, makeCanvas, scratch } from './util'
 
 /** Composite every visible layer of `d` into `target` (document-sized). */
@@ -18,37 +19,82 @@ export function renderDoc(d: DocState, target: HTMLCanvasElement, live: boolean,
   }
 }
 
-/** Copy of a raster layer with a CSS filter applied (optionally only inside `sel`, in doc coords). */
-export function filteredLayer(l: RasterLayer, filter: string, sel: Rect | null, into?: HTMLCanvasElement): HTMLCanvasElement {
+/** Copy of a raster layer with a CSS filter applied (optionally only inside `sel`). */
+export function filteredLayer(l: RasterLayer, filter: string, sel: Selection | null, into?: HTMLCanvasElement): HTMLCanvasElement {
   const out = into ?? makeCanvas(l.canvas.width, l.canvas.height)
   const c = ctx2d(out)
-  c.save()
-  if (sel) {
+  if (!sel) {
+    c.filter = filter
     c.drawImage(l.canvas, 0, 0)
-    c.beginPath()
-    c.rect(sel.x - l.x, sel.y - l.y, sel.w, sel.h)
-    c.clip()
-    c.clearRect(sel.x - l.x, sel.y - l.y, sel.w, sel.h)
+    c.filter = 'none'
+    return out
   }
-  c.filter = filter
+  // Original outside the selection plus filtered inside it. 'lighter' adds the two
+  // premultiplied halves, which also blends soft (anti-aliased) mask edges correctly.
+  const f = scratch('filter-full', l.canvas.width, l.canvas.height)
+  const fc = ctx2d(f)
+  fc.filter = filter
+  fc.drawImage(l.canvas, 0, 0)
+  fc.filter = 'none'
+  keepInside(f, sel, l.x, l.y)
   c.drawImage(l.canvas, 0, 0)
-  c.restore()
+  clearInside(out, sel, l.x, l.y)
+  c.globalCompositeOperation = 'lighter'
+  c.drawImage(f, 0, 0)
+  c.globalCompositeOperation = 'source-over'
   return out
+}
+
+/** Document-space matrix of a free transform (maps the start position to the current one). */
+export function transformMatrix(t: TransformState): DOMMatrix {
+  return new DOMMatrix()
+    .translate(t.cx, t.cy)
+    .rotate((t.angle * 180) / Math.PI)
+    .scale(t.sx, t.sy)
+    .translate(-(t.start.x + t.start.w / 2), -(t.start.y + t.start.h / 2))
+}
+
+/** Draw the transformed pixels of `t` (plus the untouched rest of the layer) into `ctx`. */
+export function drawTransformed(ctx: CanvasRenderingContext2D, t: TransformState, l: RasterLayer): void {
+  if (t.base) ctx.drawImage(t.base, l.x, l.y)
+  ctx.save()
+  ctx.imageSmoothingEnabled = t.smooth
+  ctx.imageSmoothingQuality = 'high'
+  ctx.setTransform(ctx.getTransform().multiply(transformMatrix(t)))
+  ctx.drawImage(t.src, t.start.x, t.start.y)
+  ctx.restore()
 }
 
 export function renderLayer(d: DocState, l: Layer, ctx: CanvasRenderingContext2D, live: boolean): void {
   const W = ctx.canvas.width
   const H = ctx.canvas.height
   if (l.kind === 'raster') {
+    const tf = live ? d.live.transform : null
+    if (tf && tf.layerId === l.id) {
+      const tmp = scratch('transform-preview', W, H)
+      drawTransformed(ctx2d(tmp), tf, l)
+      ctx.save()
+      ctx.globalAlpha = l.opacity
+      ctx.globalCompositeOperation = l.blend
+      ctx.drawImage(tmp, 0, 0)
+      ctx.restore()
+      return
+    }
     let src: HTMLCanvasElement = l.canvas
     const st = live ? d.live.stroke : null
     if (st && st.layerId === l.id) {
+      let buf = st.buffer
+      if (st.mask) {
+        buf = scratch('stroke-masked', buf.width, buf.height)
+        ctx2d(buf).drawImage(st.buffer, 0, 0)
+        keepInside(buf, st.mask, l.x, l.y)
+      }
       src = scratch('stroke-merge', l.canvas.width, l.canvas.height)
       const s = ctx2d(src)
       s.drawImage(l.canvas, 0, 0)
       s.globalAlpha = st.alpha
       s.globalCompositeOperation = st.erase ? 'destination-out' : 'source-over'
-      s.drawImage(st.buffer, 0, 0)
+      s.drawImage(buf, 0, 0)
       s.globalAlpha = 1
       s.globalCompositeOperation = 'source-over'
     }

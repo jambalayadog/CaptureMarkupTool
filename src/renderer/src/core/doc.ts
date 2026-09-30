@@ -1,4 +1,4 @@
-import type { FileKind, Layer, LiveState, RasterLayer, Rect, VectorLayer, ViewState } from './types'
+import type { FileKind, Layer, LiveState, RasterLayer, Rect, Selection, VectorLayer, ViewState } from './types'
 import { ctx2d, makeCanvas, uid } from './util'
 
 // ---- history -------------------------------------------------------------------
@@ -79,8 +79,8 @@ export interface DocState {
   history: History
   view: ViewState
   viewReady: boolean
-  /** Marquee selection in document pixels. */
-  selection: Rect | null
+  /** Pixel selection (rectangle, lasso or magic wand). */
+  selection: Selection | null
   selectedIds: string[]
   live: LiveState
   /** Cached composite of all layers at document resolution. */
@@ -89,7 +89,7 @@ export interface DocState {
 }
 
 export function emptyLive(): LiveState {
-  return { stroke: null, editingTextId: null, previewFilter: null, crop: null, band: null, hoverId: null }
+  return { stroke: null, transform: null, editingTextId: null, previewFilter: null, crop: null, band: null, hoverId: null }
 }
 
 export function createDoc(width: number, height: number, name: string, layers: Layer[]): DocState {

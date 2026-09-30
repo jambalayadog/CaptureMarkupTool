@@ -1,9 +1,11 @@
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, globalShortcut, ipcMain, Menu, nativeImage, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, globalShortcut, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { basename, extname, isAbsolute, join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { CaptureManager } from './capture'
-import { loadSettings, saveSettings } from './settings'
+import { ensureDir, explainWriteError } from './fsutil'
+import { Library } from './library'
+import { captureFolder, loadSettings, saveSettings } from './settings'
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
 
 const ICON = join(__dirname, '../../resources/icon.png')
@@ -18,6 +20,8 @@ let dirty = false
 let quitting = false
 let settings: Settings
 let capture: CaptureManager
+let captureSeq = 0
+let library: Library
 /** Messages for the editor page that arrived before it finished loading. */
 const outbox: Array<[string, unknown]> = []
 
@@ -77,6 +81,12 @@ function showEditor(): void {
   if (editor.isMinimized()) editor.restore()
   editor.show()
   editor.focus()
+}
+
+/** Show a message in the editor (queued until it's ready). */
+function notify(text: string): void {
+  if (editor && editorReady) editor.webContents.send('editor:notify', text)
+  else outbox.push(['editor:notify', text])
 }
 
 function sendToEditor(channel: string, payload: unknown): void {
@@ -209,7 +219,13 @@ function registerIpc(): void {
     return r.canceled || !r.filePath ? null : r.filePath
   })
 
-  ipcMain.handle('files:write', (_e, path: string, bytes: Uint8Array) => writeFile(path, bytes))
+  ipcMain.handle('files:write', async (_e, path: string, bytes: Uint8Array) => {
+    try {
+      await writeFile(path, bytes)
+    } catch (err) {
+      throw new Error(explainWriteError(err, path))
+    }
+  })
 
   ipcMain.handle('clipboard:writeImage', (_e, png: Uint8Array) => copyPngToClipboard(png))
 
@@ -241,13 +257,63 @@ function registerIpc(): void {
       registerHotkey(settings.hotkey)
       return { ok: false, error: `Couldn't register ${prettyAccelerator(next.hotkey)}. Another app may already be using it.` }
     }
+    const folderChanged = next.captureFolder !== settings.captureFolder
     settings = { ...next }
     saveSettings(settings)
     updateTrayMenu()
+    if (folderChanged) {
+      library.reset()
+      editor?.webContents.send('library:changed')
+    }
     return { ok: true }
   })
 
   ipcMain.on('app:quit', requestQuit)
+
+  // ---- capture library ----
+  ipcMain.handle('library:list', async () => ({ folder: library.folder(), items: await library.list() }))
+
+  ipcMain.handle('library:read', async (_e, p: string) => (await readFiles([p]))[0] ?? null)
+
+  ipcMain.handle('library:copy', async (_e, p: string) => {
+    const img = nativeImage.createFromPath(p)
+    if (img.isEmpty()) return false
+    await copyPngToClipboard(img.toPNG())
+    return true
+  })
+
+  ipcMain.on('library:reveal', (_e, p: string) => shell.showItemInFolder(p))
+
+  ipcMain.handle('library:trash', async (_e, p: string) => {
+    if (!library.contains(p)) return false
+    await shell.trashItem(p)
+    return true
+  })
+
+  ipcMain.on('library:startDrag', (e, p: string) => {
+    const icon = library.dragIcon(p) ?? nativeImage.createFromPath(ICON).resize({ width: 64 })
+    e.sender.startDrag({ file: p, icon })
+  })
+
+  ipcMain.on('library:openFolder', async () => {
+    const dir = library.folder()
+    try {
+      await ensureDir(dir)
+      void shell.openPath(dir)
+    } catch (err) {
+      notify((err as Error).message)
+    }
+  })
+
+  ipcMain.handle('settings:chooseFolder', async (_e, current: string) => {
+    const opts: Electron.OpenDialogOptions = {
+      title: 'Choose where captures are saved',
+      defaultPath: current || library.folder(),
+      properties: ['openDirectory', 'createDirectory']
+    }
+    const r = editor ? await dialog.showOpenDialog(editor, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled ? null : r.filePaths[0]
+  })
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -271,11 +337,34 @@ if (!app.requestSingleInstanceLock()) {
         return true
       },
       restoreEditor: showEditor,
-      onCaptured: (png) => {
+      onCaptured: async (png) => {
         if (settings.copyOnCapture) void copyPngToClipboard(png)
-        sendToEditor('editor:capture', { png: new Uint8Array(png), name: captureName() })
+        // Open the editor first; saving to the library happens in the background
+        // and must never be able to hold up editing.
+        const id = ++captureSeq
+        const name = captureName()
+        sendToEditor('editor:capture', { png: new Uint8Array(png), name, path: null, id })
+        if (!settings.autoSaveCaptures) return
+        try {
+          const saved = await library.save(png, name)
+          sendToEditor('editor:captureSaved', { id, path: saved.path })
+          if (saved.blockedFolder) {
+            notify(
+              `Windows blocked saving captures to ${saved.blockedFolder} (Controlled folder access), so they're going to ${library.folder()}. ` +
+                'Allow Markup in Windows Security > Ransomware protection, or pick another folder in File > Settings.'
+            )
+          }
+        } catch (err) {
+          console.error('[library] could not save capture:', err)
+          notify(`Couldn't save the capture to the library: ${(err as Error).message}`)
+        }
       }
     })
+    library = new Library(
+      () => captureFolder(settings),
+      () => join(app.getPath('userData'), 'Captures'),
+      () => editor?.webContents.send('library:changed')
+    )
     registerIpc()
     tray = new Tray(trayIcon())
     tray.on('click', showEditor)

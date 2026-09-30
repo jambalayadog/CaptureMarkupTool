@@ -139,3 +139,31 @@ export function pixelStamp(size: number, color: string): HTMLCanvasElement {
 
 /** Top-left offset so a stamp of `size` is centred on a pixel. */
 export const stampOffset = (size: number): number => Math.floor((size - 1) / 2)
+
+/** Bounds of the non-transparent pixels of `c` (canvas coordinates), or null if empty. */
+export function alphaBounds(c: HTMLCanvasElement): Rect | null {
+  const w = c.width
+  const h = c.height
+  const d = ctx2d(c).getImageData(0, 0, w, h).data
+  let x0 = w
+  let y0 = h
+  let x1 = -1
+  let y1 = -1
+  for (let y = 0; y < h; y++) {
+    const row = y * w
+    let first = -1
+    let last = -1
+    for (let x = 0; x < w; x++) {
+      if (d[(row + x) * 4 + 3]) {
+        if (first < 0) first = x
+        last = x
+      }
+    }
+    if (first < 0) continue
+    if (first < x0) x0 = first
+    if (last > x1) x1 = last
+    if (y < y0) y0 = y
+    y1 = y
+  }
+  return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
+}

@@ -56,8 +56,7 @@ function buildMenus(ed: Editor): { name: string; items: Item[] }[] {
         { label: 'Duplicate', shortcut: 'Ctrl+J', action: () => (hasSel ? ed.duplicateSelected() : d && ed.duplicateLayer(d.activeLayerId)), disabled: none },
         { label: 'Delete', shortcut: 'Del', action: () => ed.deleteSelection(), disabled: none },
         'sep',
-        { label: 'Select all', shortcut: 'Ctrl+A', action: () => ed.selectAll(), disabled: none },
-        { label: 'Deselect', shortcut: 'Ctrl+D', action: () => ed.deselect(), disabled: none },
+        { label: 'Free transform', shortcut: 'Ctrl+T', action: () => ed.setTool('transform'), disabled: l?.kind !== 'raster' },
         { label: 'Fill with primary color', action: () => ed.fillSelection(), disabled: none },
         'sep',
         { label: 'Bring to front', shortcut: 'Ctrl+Shift+]', action: () => ed.arrange('front'), disabled: !hasSel },
@@ -85,6 +84,20 @@ function buildMenus(ed: Editor): { name: string; items: Item[] }[] {
         { label: 'Invert colors', shortcut: 'Ctrl+I', action: () => applyFilter(ed, 'invert(1)', 'Invert'), disabled: l?.kind !== 'raster' },
         'sep',
         { label: 'Flatten image', action: () => flattenImage(ed), disabled: none || d.layers.length < 2 }
+      ]
+    },
+    {
+      name: 'Select',
+      items: [
+        { label: 'All', shortcut: 'Ctrl+A', action: () => ed.selectAll(), disabled: none },
+        { label: 'Deselect', shortcut: 'Ctrl+D', action: () => ed.deselect(), disabled: none },
+        { label: 'Invert selection', shortcut: 'Ctrl+Shift+I', action: () => ed.invertSelection(), disabled: none },
+        'sep',
+        { label: 'Rectangle select', shortcut: 'M', action: () => ed.setTool('marquee'), disabled: none },
+        { label: 'Lasso', shortcut: 'Q', action: () => ed.setTool('lasso'), disabled: none },
+        { label: 'Magic wand', shortcut: 'W', action: () => ed.setTool('wand'), disabled: none },
+        'sep',
+        { label: 'Crop to selection', action: () => cropToSelection(ed), disabled: !d?.selection }
       ]
     },
     {

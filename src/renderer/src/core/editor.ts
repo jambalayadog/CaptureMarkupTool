@@ -1,7 +1,8 @@
 import type { OpenedFile } from '../../../shared/api'
 import { TOOLS } from '../tools'
+import { applyTransform } from '../tools/transform'
 import type { PointerInfo, Tool } from '../tools/types'
-import { DEFAULT_OPTIONS, PAINT_TOOLS, TOOL_KEYS, VECTOR_TOOLS, ZOOM_STEPS } from './constants'
+import { ACCENT, DEFAULT_OPTIONS, PAINT_TOOLS, SELECT_TOOLS, TOOL_KEYS, VECTOR_TOOLS, ZOOM_STEPS } from './constants'
 import {
   createDoc,
   layerBounds,
@@ -30,7 +31,20 @@ import {
 } from './objects'
 import * as platform from './platform'
 import { flattenDoc, renderDoc } from './render'
-import type { Layer, RasterLayer, Rect, TextObj, ToolId, ToolOptions, VObj, Vec, VectorLayer } from './types'
+import { clearInside, clipSel, combine, invertSel, keepInside, outline, rectSel } from './selection'
+import type {
+  Layer,
+  RasterLayer,
+  Rect,
+  Selection,
+  SelectMode,
+  TextObj,
+  ToolId,
+  ToolOptions,
+  VObj,
+  Vec,
+  VectorLayer
+} from './types'
 import {
   clamp,
   contrastText,
@@ -52,7 +66,6 @@ interface TextEditState {
   isNew: boolean
 }
 
-export const ACCENT = '#5b8cff'
 const WORKSPACE = '#121316'
 
 const stripExt = (name: string): string => name.replace(/\.[a-z0-9]+$/i, '')
@@ -101,6 +114,8 @@ export class Editor {
   docs: DocState[] = []
   d: DocState | null = null
   tool: ToolId = 'arrow'
+  /** Tool to return to after a temporary one (free transform). */
+  previousTool: ToolId = 'select'
   opts: ToolOptions = { ...DEFAULT_OPTIONS }
   primary = '#ff3b30'
   secondary = '#ffffff'
@@ -171,13 +186,13 @@ export class Editor {
     this.requestRender()
   }
 
-  notify(text: string): void {
+  notify(text: string, ms = 2400): void {
     this.toast = { id: Date.now(), text }
     clearTimeout(this.toastTimer)
     this.toastTimer = window.setTimeout(() => {
       this.toast = null
       this.emit()
-    }, 2400)
+    }, ms)
     this.emit()
   }
 
@@ -196,6 +211,7 @@ export class Editor {
 
   activate(id: string): void {
     if (this.textEdit) this.endTextEdit()
+    if (this.d?.live.transform) applyTransform(this)
     this.toolImpl.cancel?.(this)
     this.d = this.docs.find((x) => x.id === id) ?? null
     if (this.d && !this.d.viewReady && this.vw) this.fit()
@@ -274,7 +290,9 @@ export class Editor {
       await platform.writeTarget(target, await encodeDoc(d, target.kind))
     } catch (err) {
       console.error(err)
-      this.notify(`Couldn't save: ${(err as Error).message}`)
+      // IPC errors arrive as "Error invoking remote method '…': Error: <message>"
+      const msg = (err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+      this.notify(`Couldn't save: ${msg}`, 9000)
       return
     }
     if (target.path || target.handle) {
@@ -300,6 +318,8 @@ export class Editor {
   commit(label: string, before: Snapshot, patches: Patch[] = [], mergeKey?: string): void {
     const d = this.d
     if (!d) return
+    // Any other edit invalidates an unapplied free transform (it previews stale pixels).
+    d.live.transform = null
     const h = d.history
     const last = h.entries[h.index - 1]
     const now = performance.now()
@@ -324,20 +344,25 @@ export class Editor {
   undo(): void {
     if (!this.d || this.dragTool) return
     if (this.textEdit) this.endTextEdit()
+    // Mid-transform, undo just resets the transform (like Photoshop, you stay in it).
+    const transforming = !!this.d.live.transform
     this.toolImpl.cancel?.(this)
+    if (transforming) return this.toolImpl.activate?.(this)
     if (undoDoc(this.d)) this.afterHistoryJump()
   }
 
   redo(): void {
     if (!this.d || this.dragTool) return
     if (this.textEdit) this.endTextEdit()
+    const transforming = !!this.d.live.transform
     this.toolImpl.cancel?.(this)
+    if (transforming) return
     if (redoDoc(this.d)) this.afterHistoryJump()
   }
 
   private afterHistoryJump(): void {
     const d = this.d!
-    if (d.selection) d.selection = intersect(d.selection, { x: 0, y: 0, w: d.width, h: d.height })
+    if (d.selection) d.selection = clipSel(d.selection, d.width, d.height)
     this.updateAnts()
     this.changed()
   }
@@ -704,15 +729,36 @@ export class Editor {
     return f?.obj.type === 'text' ? f.obj : null
   }
 
-  // ---- marquee selection ------------------------------------------------------------
+  // ---- pixel selection ---------------------------------------------------------------
 
-  setSelection(r: Rect | null): void {
+  /** Replace the selection. A plain rectangle is snapped to whole pixels. */
+  setSelection(s: Rect | Selection | null): void {
     const d = this.d
     if (!d) return
-    d.selection = r ? intersect(pixelRect(r), { x: 0, y: 0, w: d.width, h: d.height }) : null
+    const sel = s && ('mask' in s ? s : rectSel(pixelRect(s)))
+    d.selection = sel ? clipSel(sel, d.width, d.height) : null
     this.updateAnts()
     this.requestRender()
     this.emit()
+  }
+
+  /** Merge a new selection into the current one. */
+  applySelection(s: Selection | null, mode: SelectMode): void {
+    this.setSelection(combine(this.d?.selection ?? null, s, mode))
+  }
+
+  /** Selection mode for a pointer press: Shift adds, Alt subtracts, both intersect. */
+  selectModeFor(p: { shift: boolean; alt: boolean }): SelectMode {
+    if (p.shift && p.alt) return 'intersect'
+    if (p.shift) return 'add'
+    if (p.alt) return 'subtract'
+    return this.opts.selectMode
+  }
+
+  invertSelection(): void {
+    const d = this.d
+    if (!d) return
+    this.setSelection(invertSel(d.selection, d.width, d.height))
   }
 
   private updateAnts(): void {
@@ -746,10 +792,10 @@ export class Editor {
     const l = this.activeLayer()
     if (!d?.selection || l?.kind !== 'raster') return
     if (l.locked) return this.notify('Layer is locked')
+    const s = d.selection
     const edit = this.beginRasterEdit(l)
-    const r = { x: d.selection.x - l.x, y: d.selection.y - l.y, w: d.selection.w, h: d.selection.h }
-    ctx2d(l.canvas).clearRect(r.x, r.y, r.w, r.h)
-    edit.mark(r)
+    clearInside(l.canvas, s, l.x, l.y)
+    edit.mark({ x: s.x - l.x, y: s.y - l.y, w: s.w, h: s.h })
     edit.commit('Clear')
   }
 
@@ -759,12 +805,14 @@ export class Editor {
     const before = this.snapshot()
     const { layer } = this.ensureRasterLayer()
     const edit = this.beginRasterEdit(layer, before)
-    const s = d.selection ?? { x: 0, y: 0, w: d.width, h: d.height }
-    const r = { x: s.x - layer.x, y: s.y - layer.y, w: s.w, h: s.h }
-    const c = ctx2d(layer.canvas)
-    c.fillStyle = color
-    c.fillRect(r.x, r.y, r.w, r.h)
-    edit.mark(r)
+    const s = d.selection ?? rectSel({ x: 0, y: 0, w: d.width, h: d.height })
+    const patch = makeCanvas(s.w, s.h)
+    const p = ctx2d(patch)
+    p.fillStyle = color
+    p.fillRect(0, 0, s.w, s.h)
+    keepInside(patch, s, s.x, s.y)
+    ctx2d(layer.canvas).drawImage(patch, s.x - layer.x, s.y - layer.y)
+    edit.mark({ x: s.x - layer.x, y: s.y - layer.y, w: s.w, h: s.h })
     edit.commit('Fill')
   }
 
@@ -786,6 +834,7 @@ export class Editor {
       const s = d.selection
       const c = makeCanvas(s.w, s.h)
       ctx2d(c).drawImage(l.canvas, l.x - s.x, l.y - s.y)
+      keepInside(c, s, s.x, s.y)
       await platform.copyPng(await canvasToBlob(c))
       if (cut) this.clearSelectionPixels()
       this.notify(cut ? 'Cut selection' : 'Copied selection')
@@ -805,6 +854,7 @@ export class Editor {
     if (s) {
       out = makeCanvas(s.w, s.h)
       ctx2d(out).drawImage(flat, -s.x, -s.y)
+      keepInside(out, s, s.x, s.y)
     }
     try {
       await platform.copyPng(await canvasToBlob(out))
@@ -948,12 +998,14 @@ export class Editor {
   setTool(id: ToolId): void {
     if (id === this.tool) return
     if (this.textEdit) this.endTextEdit()
-    this.toolImpl.cancel?.(this)
+    // deactivate first: leaving free transform applies it rather than discarding it
     this.toolImpl.deactivate?.(this)
+    this.toolImpl.cancel?.(this)
+    this.previousTool = this.tool
     this.tool = id
     if (this.d) {
       this.d.live.hoverId = null
-      if (PAINT_TOOLS.includes(id) || id === 'marquee' || id === 'crop') this.d.selectedIds = []
+      if (PAINT_TOOLS.includes(id) || SELECT_TOOLS.includes(id) || id === 'crop' || id === 'transform') this.d.selectedIds = []
     }
     this.toolImpl.activate?.(this)
     this.updateCursor(null)
@@ -1209,7 +1261,11 @@ export class Editor {
           if (this.d) mergeDown(this, this.d.activeLayerId)
           return true
         case 'i':
-          applyFilter(this, 'invert(1)', 'Invert')
+          if (shift) this.invertSelection()
+          else applyFilter(this, 'invert(1)', 'Invert')
+          return true
+        case 't':
+          if (this.d) this.setTool('transform')
           return true
         case 'u':
           if (this.activeLayer()?.kind === 'raster') this.showDialog('adjust')
@@ -1453,22 +1509,43 @@ export class Editor {
     ctx.stroke()
   }
 
-  private drawSelectionOverlay(ctx: CanvasRenderingContext2D): void {
-    const d = this.d!
-    // marching ants
-    if (d.selection) {
-      const r = this.screenRect(d.selection)
-      const off = (performance.now() / 60) % 8
-      ctx.lineWidth = 1
+  private drawAnts(ctx: CanvasRenderingContext2D, s: Selection): void {
+    const off = (performance.now() / 60) % 8
+    const path = outline(s)
+    ctx.save()
+    ctx.lineWidth = 1
+    if (!path) {
+      const r = this.screenRect(s)
+      const box: [number, number, number, number] = [Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h)]
       ctx.setLineDash([4, 4])
       ctx.strokeStyle = '#000'
       ctx.lineDashOffset = off
-      ctx.strokeRect(Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h))
+      ctx.strokeRect(...box)
       ctx.strokeStyle = '#fff'
       ctx.lineDashOffset = off + 4
-      ctx.strokeRect(Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h))
-      ctx.setLineDash([])
+      ctx.strokeRect(...box)
+    } else {
+      // The outline is in document pixels relative to the selection; scale it to the
+      // screen but keep 1px lines and a screen-sized dash.
+      const { zoom, panX, panY } = this.d!.view
+      const dpr = this.dpr
+      ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, Math.round(dpr * (panX + s.x * zoom)) + 0.5, Math.round(dpr * (panY + s.y * zoom)) + 0.5)
+      ctx.lineWidth = 1 / zoom
+      ctx.setLineDash([4 / zoom, 4 / zoom])
+      ctx.strokeStyle = '#000'
+      ctx.lineDashOffset = off / zoom
+      ctx.stroke(path)
+      ctx.strokeStyle = '#fff'
+      ctx.lineDashOffset = (off + 4) / zoom
+      ctx.stroke(path)
     }
+    ctx.restore()
+  }
+
+  private drawSelectionOverlay(ctx: CanvasRenderingContext2D): void {
+    const d = this.d!
+    // marching ants (hidden while a free transform carries the selection)
+    if (d.selection && !d.live.transform) this.drawAnts(ctx, d.selection)
 
     const showHandles = this.tool === 'select' || VECTOR_TOOLS.includes(this.tool)
     // hover outline

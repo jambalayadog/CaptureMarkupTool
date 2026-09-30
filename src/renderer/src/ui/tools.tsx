@@ -6,6 +6,7 @@ import {
   EyeOff,
   Hand,
   Highlighter,
+  LassoSelect,
   ListOrdered,
   MessageSquare,
   MousePointer2,
@@ -13,10 +14,12 @@ import {
   PaintBucket,
   Pencil,
   Pipette,
+  Scaling,
   Slash,
   Square,
   SquareDashed,
   Type,
+  WandSparkles,
   ZoomIn,
   type LucideIcon
 } from 'lucide-react'
@@ -33,8 +36,11 @@ export interface ToolMeta {
 export const TOOL_GROUPS: ToolMeta[][] = [
   [
     { id: 'select', label: 'Select & move', key: 'V', icon: MousePointer2, hint: 'Click to select · drag to move · Shift-click to add · Alt-drag to duplicate · double-click text to edit' },
-    { id: 'marquee', label: 'Rectangle select', key: 'M', icon: SquareDashed, hint: 'Drag to select pixels · Shift for a square · drag inside to move the selection' },
-    { id: 'crop', label: 'Crop', key: 'C', icon: Crop, hint: 'Drag handles or draw a new area · drag outside the image to expand the canvas · Enter to apply' }
+    { id: 'marquee', label: 'Rectangle select', key: 'M', icon: SquareDashed, hint: 'Drag to select · Shift adds, Alt subtracts · Shift during the drag for a square · drag inside to move the selection' },
+    { id: 'lasso', label: 'Lasso select', key: 'Q', icon: LassoSelect, hint: 'Drag a freehand shape, or click point by point (Enter or click the first point to close) · Shift adds, Alt subtracts' },
+    { id: 'wand', label: 'Magic wand', key: 'W', icon: WandSparkles, hint: 'Click to select similar colours · Shift adds, Alt subtracts · set tolerance in the options bar' },
+    { id: 'crop', label: 'Crop', key: 'C', icon: Crop, hint: 'Drag handles or draw a new area · drag outside the image to expand the canvas · Enter to apply' },
+    { id: 'transform', label: 'Free transform (Ctrl+T)', icon: Scaling, hint: 'Drag handles to scale (Shift keeps proportions, Alt from centre) · drag outside to rotate (Shift snaps) · Enter applies, Esc cancels' }
   ],
   [
     { id: 'arrow', label: 'Arrow', key: 'A', icon: MoveUpRight, hint: 'Drag to draw · Shift snaps to 45°' },

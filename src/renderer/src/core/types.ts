@@ -132,10 +132,44 @@ export type VObjType = VObj['type']
 
 // ---- editor ---------------------------------------------------------------
 
+/**
+ * A pixel selection. The rectangle is its bounds in document pixels; `mask`
+ * (bounds-sized, alpha = selected) is null for plain rectangular selections.
+ * Treat selections as immutable: replace, don't mutate.
+ */
+export interface Selection extends Rect {
+  mask: HTMLCanvasElement | null
+}
+
+export type SelectMode = 'replace' | 'add' | 'subtract' | 'intersect'
+
+/** An in-progress free transform of a raster layer (or of the selected pixels). */
+export interface TransformState {
+  layerId: string
+  /** The pixels being transformed. */
+  src: HTMLCanvasElement
+  /** Layer pixels with the floating part cut out (selection transforms), aligned with the layer. */
+  base: HTMLCanvasElement | null
+  /** Centre, scale and rotation (radians) of `src` in document space. */
+  cx: number
+  cy: number
+  sx: number
+  sy: number
+  angle: number
+  /** Where `src` started (identity transform). */
+  start: Rect
+  /** Selection to carry along with the pixels. */
+  selection: Selection | null
+  smooth: boolean
+}
+
 export type ToolId =
   | 'select'
   | 'marquee'
+  | 'lasso'
+  | 'wand'
   | 'crop'
+  | 'transform'
   | 'arrow'
   | 'line'
   | 'rect'
@@ -183,6 +217,11 @@ export interface ToolOptions {
   fillContiguous: boolean
   fillSampleMerged: boolean
   sampleMerged: boolean
+  selectMode: SelectMode
+  lassoAntiAlias: boolean
+  wandTolerance: number
+  wandContiguous: boolean
+  wandSampleMerged: boolean
 }
 
 export interface ViewState {
@@ -198,7 +237,10 @@ export interface LiveState {
     buffer: HTMLCanvasElement
     erase: boolean
     alpha: number
+    /** Shaped selection the stroke is confined to. */
+    mask: Selection | null
   } | null
+  transform: TransformState | null
   editingTextId: string | null
   previewFilter: { layerId: string; filter: string } | null
   crop: Rect | null

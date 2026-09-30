@@ -2,7 +2,8 @@ import { restore, type Snapshot } from '../core/doc'
 import type { Editor, RasterEdit } from '../core/editor'
 import { bresenham, floodMask, pixelStamp, stampOffset } from '../core/raster'
 import { renderDoc } from '../core/render'
-import type { RasterLayer, Vec } from '../core/types'
+import { keepInside, selectionTester } from '../core/selection'
+import type { RasterLayer, Selection, Vec } from '../core/types'
 import { ctx2d, hexToRgb, makeCanvas, rgbToHex, scratch } from '../core/util'
 import type { PointerInfo, Tool } from './types'
 
@@ -23,6 +24,8 @@ interface Stroke {
   last: Vec
   /** Plotted pixels (pixel-perfect mode). */
   pts: Vec[]
+  /** Shaped selection to confine the stroke to (rectangles use a clip instead). */
+  mask: Selection | null
 }
 
 let stroke: Stroke | null = null
@@ -109,6 +112,7 @@ function begin(ed: Editor, kind: PaintKind, p: PointerInfo): void {
     clipped = true
   }
   const erase = kind === 'eraser'
+  const mask = d.selection?.mask ? d.selection : null
   const s: Stroke = {
     kind,
     layer,
@@ -121,10 +125,11 @@ function begin(ed: Editor, kind: PaintKind, p: PointerInfo): void {
     pixel: kind === 'pencil' || (erase && ed.opts.eraserHard),
     erase,
     last: toLayer(layer, p.doc),
-    pts: []
+    pts: [],
+    mask
   }
   stroke = s
-  d.live.stroke = { layerId: layer.id, buffer, erase, alpha: kind === 'brush' ? ed.opts.brushOpacity : 1 }
+  d.live.stroke = { layerId: layer.id, buffer, erase, alpha: kind === 'brush' ? ed.opts.brushOpacity : 1, mask }
   const from = p.shift && lastEnd?.layerId === layer.id ? toLayer(layer, lastEnd.doc) : s.last
   segment(ed, s, from, s.last, p.pressure)
   ed.invalidate()
@@ -136,6 +141,7 @@ function finish(ed: Editor): void {
   stroke = null
   if (!s || !d) return
   if (s.clipped) s.bctx.restore()
+  if (s.mask) keepInside(s.bctx.canvas, s.mask, s.layer.x, s.layer.y)
   const st = d.live.stroke
   const l = ctx2d(s.layer.canvas)
   l.save()
@@ -277,9 +283,11 @@ export const fillTool: Tool = {
     const lctx = ctx2d(layer.canvas)
     const tgt = lctx.getImageData(lx, ly, bbox.w, bbox.h)
     const [r, g, b] = hexToRgb(color)
+    const selected = d.selection?.mask ? selectionTester(d.selection) : null
     for (let y = 0; y < bbox.h; y++) {
       for (let x = 0; x < bbox.w; x++) {
         if (!mask[(bbox.y + y) * sample.width + bbox.x + x]) continue
+        if (selected && !selected(bbox.x + off.x + x, bbox.y + off.y + y)) continue
         const i = (y * bbox.w + x) * 4
         tgt.data[i] = r
         tgt.data[i + 1] = g

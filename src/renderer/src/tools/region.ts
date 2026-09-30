@@ -1,7 +1,7 @@
 import { cropTo } from '../core/imageOps'
 import { dragRectHandle, rectHandles, HANDLE_CURSORS, type HandleId } from '../core/objects'
 import type { Rect, Vec } from '../core/types'
-import { clamp, contains, normRect } from '../core/util'
+import { contains, normRect } from '../core/util'
 import type { Editor } from '../core/editor'
 import type { Tool } from './types'
 
@@ -10,56 +10,6 @@ const snapPx = (p: Vec): Vec => ({ x: Math.round(p.x), y: Math.round(p.y) })
 function squareFrom(a: Vec, b: Vec): Vec {
   const s = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))
   return { x: a.x + Math.sign(b.x - a.x || 1) * s, y: a.y + Math.sign(b.y - a.y || 1) * s }
-}
-
-// ---- rectangular marquee -------------------------------------------------------------------
-
-let marquee: { kind: 'new'; start: Vec } | { kind: 'move'; start: Vec; orig: Rect } | null = null
-
-export const marqueeTool: Tool = {
-  id: 'marquee',
-  cursor: (ed, p) => (p && ed.d?.selection && contains(ed.d.selection, p.doc) ? 'move' : 'crosshair'),
-  down(ed, p) {
-    const d = ed.d!
-    if (d.selection && contains(d.selection, p.doc) && !p.shift) {
-      marquee = { kind: 'move', start: p.doc, orig: { ...d.selection } }
-      return
-    }
-    const s = snapPx(p.doc)
-    marquee = { kind: 'new', start: { x: clamp(s.x, 0, d.width), y: clamp(s.y, 0, d.height) } }
-  },
-  move(ed, p, dragging) {
-    const d = ed.d!
-    if (!dragging || !marquee) return
-    if (marquee.kind === 'move') {
-      const o = marquee.orig
-      const dx = Math.round(p.doc.x - marquee.start.x)
-      const dy = Math.round(p.doc.y - marquee.start.y)
-      d.selection = {
-        x: clamp(o.x + dx, 0, d.width - o.w),
-        y: clamp(o.y + dy, 0, d.height - o.h),
-        w: o.w,
-        h: o.h
-      }
-      return
-    }
-    let e = snapPx(p.doc)
-    if (p.shift) e = squareFrom(marquee.start, e)
-    e = { x: clamp(e.x, 0, d.width), y: clamp(e.y, 0, d.height) }
-    const r = normRect(marquee.start, e)
-    d.selection = r.w && r.h ? r : null
-  },
-  up(ed) {
-    const d = ed.d!
-    marquee = null
-    ed.setSelection(d.selection)
-  },
-  cancel() {
-    marquee = null
-  },
-  dblclick(ed) {
-    ed.setSelection(null)
-  }
 }
 
 // ---- crop ---------------------------------------------------------------------------------------
