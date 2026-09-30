@@ -1,4 +1,4 @@
-' Starts Markup in development mode with no console window.
+' Starts Capture Markup Tool in development mode with no console window.
 ' Double-click it, or run: explorer.exe scripts\start-dev.vbs
 ' Output goes to dev.log in the project folder.
 Set fso = CreateObject("Scripting.FileSystemObject")

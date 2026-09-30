@@ -61,7 +61,7 @@ const PICKER_TYPES: Record<FileKind, { description: string; accept: Record<strin
   png: { description: 'PNG image', accept: { 'image/png': ['.png'] } },
   jpg: { description: 'JPEG image', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } },
   webp: { description: 'WebP image', accept: { 'image/webp': ['.webp'] } },
-  imk: { description: 'Markup project (keeps layers)', accept: { 'application/x-markup': ['.imk'] } }
+  imk: { description: 'Capture Markup Tool project (keeps layers)', accept: { 'application/x-markup': ['.imk'] } }
 }
 
 /** Ask where to save. Returns null if the user cancelled. */

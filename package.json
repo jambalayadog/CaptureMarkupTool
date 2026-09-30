@@ -1,8 +1,8 @@
 {
-  "name": "image-markup-editor",
-  "productName": "Markup",
+  "name": "capture-markup-tool",
+  "productName": "Capture Markup Tool",
   "version": "0.1.0",
-  "description": "A layered image markup editor: screenshots, annotations, pixel art and photo basics.",
+  "description": "Capture Markup Tool: a layered screenshot and image markup editor (annotations, pixel art, photo basics).",
   "main": "./out/main/index.js",
   "author": "jwatt",
   "license": "UNLICENSED",
@@ -17,8 +17,9 @@
     "postinstall": "node node_modules/electron/install.js"
   },
   "build": {
-    "appId": "com.jwatt.markup",
-    "productName": "Markup",
+    "appId": "com.jwatt.capturemarkuptool",
+    "productName": "Capture Markup Tool",
+    "executableName": "CaptureMarkupTool",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
@@ -39,8 +40,8 @@
     "fileAssociations": [
       {
         "ext": "imk",
-        "name": "Markup Project",
-        "description": "Markup layered project"
+        "name": "Capture Markup Tool Project",
+        "description": "Capture Markup Tool layered project"
       }
     ]
   },

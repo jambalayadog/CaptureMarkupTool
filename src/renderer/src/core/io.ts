@@ -66,7 +66,7 @@ export interface DecodedProject {
 
 export async function decodeProject(bytes: Uint8Array): Promise<DecodedProject> {
   const file = JSON.parse(new TextDecoder().decode(bytes)) as ProjectFile
-  if (file.app !== 'markup' || !Array.isArray(file.layers)) throw new Error('Not a Markup project file')
+  if (file.app !== 'markup' || !Array.isArray(file.layers)) throw new Error('Not a Capture Markup Tool project file')
   const layers: Layer[] = []
   for (const l of file.layers) {
     const blend = l.blend as GlobalCompositeOperation

@@ -35,7 +35,7 @@ export async function ensureDir(dir: string): Promise<void> {
 
 function blockedMessage(target: string): string {
   return (
-    `Windows blocked Markup from writing to "${basename(target) || target}". ` +
+    `Windows blocked Capture Markup Tool from writing to "${basename(target) || target}". ` +
     'This is usually Controlled folder access (Windows Security > Ransomware protection).'
   )
 }
@@ -44,7 +44,7 @@ function blockedMessage(target: string): string {
 export function explainWriteError(err: unknown, path: string): string {
   const code = (err as NodeJS.ErrnoException).code
   if ((code === 'ENOENT' || code === 'EPERM' || code === 'EACCES') && existsSync(dirname(path))) {
-    return `${blockedMessage(dirname(path))} Allow Markup there, or save somewhere else.`
+    return `${blockedMessage(dirname(path))} Allow the app there, or save somewhere else.`
   }
   return (err as Error).message
 }

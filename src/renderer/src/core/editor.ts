@@ -121,10 +121,10 @@ export class Editor {
   secondary = '#ffffff'
   highlightColor = '#ffe14d'
   recent: string[] = []
-  palette = 'Markup'
+  palette = 'Default'
   showGrid = true
   dialog: DialogKind | null = null
-  toast: { id: number; text: string } | null = null
+  toast: { id: number; text: string; sticky: boolean } | null = null
   textEdit: TextEditState | null = null
   textArea: HTMLTextAreaElement | null = null
   version = 0
@@ -186,13 +186,22 @@ export class Editor {
     this.requestRender()
   }
 
-  notify(text: string, ms = 2400): void {
-    this.toast = { id: Date.now(), text }
+  /**
+   * Show a message at the bottom of the window. Quick confirmations fade after
+   * `ms`; pass `'sticky'` for anything the user needs time to read (warnings,
+   * errors) so it stays until they close it.
+   */
+  notify(text: string, ms: number | 'sticky' = 2400): void {
+    const sticky = ms === 'sticky'
+    this.toast = { id: Date.now(), text, sticky }
     clearTimeout(this.toastTimer)
-    this.toastTimer = window.setTimeout(() => {
-      this.toast = null
-      this.emit()
-    }, ms)
+    if (!sticky) this.toastTimer = window.setTimeout(() => this.dismissToast(), ms)
+    this.emit()
+  }
+
+  dismissToast(): void {
+    clearTimeout(this.toastTimer)
+    this.toast = null
     this.emit()
   }
 
@@ -293,7 +302,7 @@ export class Editor {
       console.error(err)
       // IPC errors arrive as "Error invoking remote method '…': Error: <message>"
       const msg = (err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-      this.notify(`Couldn't save: ${msg}`, 9000)
+      this.notify(`Couldn't save: ${msg}`, 'sticky')
       return
     }
     if (target.path || target.handle) {

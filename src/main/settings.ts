@@ -12,11 +12,22 @@ export const DEFAULT_SETTINGS: Settings = {
   blockedFolder: ''
 }
 
-/** Where captures are saved. MARKUP_CAPTURE_DIR overrides it in development (for tests). */
-export function captureFolder(s: Settings): string {
-  const override = process.env['MARKUP_CAPTURE_DIR']
+/**
+ * Default capture folder: %USERPROFILE%\CaptureMarkupTool\Images. It's in the
+ * user's own folder, so Windows' Controlled Folder Access (which guards
+ * Pictures, Videos, Documents and Desktop) never blocks it. Videos can live
+ * alongside it in CaptureMarkupTool\Videos later.
+ * CMT_CAPTURE_DIR overrides it in development (for tests).
+ */
+export function defaultCaptureFolder(): string {
+  const override = process.env['CMT_CAPTURE_DIR']
   if (override && !app.isPackaged) return override
-  return s.captureFolder || join(app.getPath('pictures'), 'Markup')
+  return join(app.getPath('home'), 'CaptureMarkupTool', 'Images')
+}
+
+/** Where captures are saved: the folder picked in Settings, or the default. */
+export function captureFolder(s: Settings): string {
+  return s.captureFolder || defaultCaptureFolder()
 }
 
 const file = (): string => join(app.getPath('userData'), 'settings.json')

@@ -1,9 +1,9 @@
-# Markup
+# Capture Markup Tool
 
-A layered image markup editor for Windows, somewhere between Snipping Tool, Snagit, Greenshot, Aseprite and a very small Photoshop.
+A layered screenshot and image markup editor for Windows, somewhere between Snipping Tool, Snagit, Greenshot, Aseprite and a very small Photoshop.
 
 - **Capture**: global hotkey (default **Ctrl+PrintScreen**) freezes every display. Drag a region, click a window, or press Enter for the whole screen. It lives in the system tray.
-- **Capture library**: every capture is saved to `Pictures\Markup` (configurable in Settings) and shows up in the *Recent captures* strip under the canvas. Click one to reopen it, drag it straight into Slack or email, or right-click to copy, show it in the folder, or send it to the Recycle Bin. Ctrl+S on a capture updates its library file. If Windows' Controlled folder access blocks Pictures, captures go to `%USERPROFILE%\Markup\Images` until you allow Markup; *File → Settings* explains how.
+- **Capture library**: every capture is saved to `%USERPROFILE%\CaptureMarkupTool\Images` (configurable in Settings) and shows up in the *Recent captures* strip under the canvas. Click one to reopen it, drag it straight into Slack or email, or right-click to copy, show it in the folder, or send it to the Recycle Bin. Ctrl+S on a capture updates its library file. The default folder avoids Pictures and Videos on purpose: Windows' Controlled folder access guards those from unrecognized apps. If you pick a folder in Settings that Windows blocks, captures fall back to the default and Settings explains why.
 - **Annotate**: arrows, lines, rectangles, ellipses, text, callouts, numbered steps, highlighter, and blur/pixelate/solid redaction. They stay editable: select one to move it, resize it, or restyle it from the options bar.
 - **Paint**: anti-aliased brush with pen pressure, a pixel pencil with pixel-perfect lines, eraser, flood fill, eyedropper and a pixel grid at 800% and up. It comes with palettes (PICO-8, Endesga 32 and others).
 - **Selections**: rectangle (M), lasso (Q: drag freehand, or click point by point) and magic wand (W). Hold Shift to add, Alt to subtract, both to intersect, or pick a mode in the options bar. Brushes, fill, clear, copy and adjustments all respect the selection's exact shape. Ctrl+Shift+I inverts it.
@@ -24,18 +24,18 @@ npm run dist       # Windows installer in dist/
 
 To start the dev app without a terminal window, double-click `scripts\start-dev.vbs` (output goes to `dev.log`). Launching it through Explorer also avoids a quirk: apps started from inside another packaged app (such as the Claude desktop app) have their AppData writes silently redirected into that app's private folder.
 
-In development, **F12** opens DevTools and **F5** reloads. By default, closing the window hides Markup to the tray so the capture hotkey keeps working. Use the tray menu's **Quit** item, or turn that off in *File → Settings*.
+In development, **F12** opens DevTools and **F5** reloads. By default, closing the window hides the app to the tray so the capture hotkey keeps working. Use the tray menu's **Quit** item, or turn that off in *File → Settings*. Settings and caches live in `%APPDATA%\CaptureMarkupTool`.
 
 Development-only hooks, all ignored in packaged builds:
 
-- `MARKUP_CAPTURE_DIR=<folder>` sends captures to a scratch folder instead of your real library.
+- `CMT_CAPTURE_DIR=<folder>` sends captures to a scratch folder instead of your real library.
 - `electron . --capture-test` runs the whole capture pipeline on a 64×64 corner of the primary display, without showing the overlay.
 - `electron . --debug-shot=<file.png>` saves a PNG of the editor window's own contents.
 
 ## Files
 
 - **.png / .jpg / .webp** are flattened images.
-- **.imk** is a Markup project that keeps layers and editable annotations. It's JSON with PNG data for the pixel layers.
+- **.imk** is a Capture Markup Tool project that keeps layers and editable annotations. It's JSON with PNG data for the pixel layers.
 
 Redaction objects are applied when you export a flattened image. In an `.imk` project the original pixels are still stored under the redaction so it stays editable, so share the PNG, not the project.
 

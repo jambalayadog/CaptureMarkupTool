@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import { useEffect } from 'react'
 import { decodeImage } from '../core/io'
 import { api, browserCapture, fileToOpened } from '../core/platform'
@@ -84,7 +85,8 @@ export function App(): React.JSX.Element {
       savedPaths.set(id, path)
       link(id)
     })
-    const offNotify = api?.onNotify((text) => editor.notify(text, 12000))
+    // Messages from the main process are warnings/errors: keep them up until dismissed.
+    const offNotify = api?.onNotify((text) => editor.notify(text, 'sticky'))
     const offOpen = api?.onOpenFiles((files) => void editor.openFiles(files))
     api?.ready()
     return () => {
@@ -127,8 +129,11 @@ export function App(): React.JSX.Element {
       {ed.d && <StatusBar />}
       <Dialogs />
       {ed.toast && (
-        <div className="toast" key={ed.toast.id}>
-          {ed.toast.text}
+        <div className={ed.toast.sticky ? 'toast sticky' : 'toast'} key={ed.toast.id} role="status">
+          <span className="toast-text">{ed.toast.text}</span>
+          <button className="toast-close" title="Dismiss" onClick={() => ed.dismissToast()}>
+            <X size={14} />
+          </button>
         </div>
       )}
     </div>

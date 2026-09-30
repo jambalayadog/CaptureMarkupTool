@@ -1,10 +1,9 @@
-// The capture library: a folder (default Pictures\Markup) where captures are
+// The capture library: a folder (default %USERPROFILE%\CaptureMarkupTool\Images) where captures are
 // auto-saved, listed newest-first with cached thumbnails for the editor's strip.
 //
-// If Windows blocks the chosen folder (Controlled Folder Access protects
-// Pictures, Documents and Desktop from unrecognised apps), captures go to a
-// fallback folder (%USERPROFILE%\Markup\Images) instead, and both folders are
-// shown in the strip.
+// If Windows blocks a folder picked in Settings (Controlled Folder Access protects
+// Pictures, Documents and Desktop from unrecognised apps), captures go to the
+// default folder instead, and both folders are shown in the strip.
 import { nativeImage, type NativeImage } from 'electron'
 import { existsSync, watch, type FSWatcher } from 'fs'
 import { readdir, stat, unlink, writeFile } from 'fs/promises'
@@ -61,10 +60,10 @@ export class Library {
     this.setBlocked('')
   }
 
-  /** Test the chosen folder again, e.g. after allowing Markup in Windows Security. */
+  /** Test the chosen folder again, e.g. after allowing the app in Windows Security. */
   async retry(): Promise<boolean> {
     const dir = this.chosen()
-    const probe = join(dir, '.markup-write-test')
+    const probe = join(dir, '.cmt-write-test')
     try {
       await ensureDir(dir)
       await writeFile(probe, '')

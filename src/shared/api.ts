@@ -32,9 +32,9 @@ export interface Settings {
   closeToTray: boolean
   /** Save every capture to the library folder automatically. */
   autoSaveCaptures: boolean
-  /** Library folder; empty means the default (Pictures\Markup). */
+  /** Library folder; empty means the default (%USERPROFILE%\CaptureMarkupTool\Images). */
   captureFolder: string
-  /** Library folder Windows refused to let Markup write to (managed by the app). */
+  /** Library folder Windows refused to let the app write to (managed by the app). */
   blockedFolder: string
 }
 
@@ -83,7 +83,7 @@ export interface EditorApi {
   trashFile(path: string): Promise<boolean>
   startDrag(path: string): void
   openLibraryFolder(): void
-  /** Test the chosen library folder again (after allowing Markup in Windows Security). */
+  /** Test the chosen library folder again (after allowing the app in Windows Security). */
   retryLibraryFolder(): Promise<{ ok: boolean; folder: string }>
   onLibraryChanged(cb: () => void): () => void
   chooseFolder(current: string): Promise<string | null>

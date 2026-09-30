@@ -354,15 +354,15 @@ function SettingsDialog(): React.JSX.Element {
               Clear
             </button>
           </div>
-          <p className="form-note">Works from anywhere while Markup is running (it lives in the system tray).</p>
+          <p className="form-note">Works from anywhere while the app is running (it lives in the system tray).</p>
           <label className="check">
             <input type="checkbox" checked={s.autoSaveCaptures} onChange={(e) => setS({ ...s, autoSaveCaptures: e.target.checked })} />
             Save every capture to the library automatically
           </label>
           <div className="form-row">
             <span className="form-label">Library folder</span>
-            <span className="folder-path" title={s.captureFolder || 'Pictures\\Markup'}>
-              {s.captureFolder || 'Pictures\\Markup (default)'}
+            <span className="folder-path" title={s.captureFolder || lib?.folder}>
+              {s.captureFolder || (lib ? `${lib.folder} (default)` : 'Default')}
             </span>
             <button
               type="button"
@@ -383,7 +383,7 @@ function SettingsDialog(): React.JSX.Element {
           {lib?.blocked && (
             <div className="form-warning">
               <p>
-                Windows is blocking Markup from saving to <b>{lib.blocked}</b> (Controlled folder access), so captures are
+                Windows is blocking the app from saving to <b>{lib.blocked}</b> (Controlled folder access), so captures are
                 going to <b>{lib.folder}</b>.
               </p>
               <p>
@@ -409,7 +409,7 @@ function SettingsDialog(): React.JSX.Element {
           </label>
           <label className="check">
             <input type="checkbox" checked={s.closeToTray} onChange={(e) => setS({ ...s, closeToTray: e.target.checked })} />
-            Closing the window keeps Markup running in the tray
+            Closing the window keeps the app running in the tray
           </label>
           {error && <p className="form-error">{error}</p>}
         </>

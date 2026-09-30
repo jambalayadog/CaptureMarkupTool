@@ -5,13 +5,20 @@ import { existsSync } from 'fs'
 import { CaptureManager } from './capture'
 import { explainWriteError } from './fsutil'
 import { Library } from './library'
-import { captureFolder, loadSettings, saveSettings } from './settings'
+import { captureFolder, defaultCaptureFolder, loadSettings, saveSettings } from './settings'
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
 
 const ICON = join(__dirname, '../../resources/icon.png')
 const PRELOAD = join(__dirname, '../preload/index.js')
 const OPENABLE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.imk'])
 const TITLEBAR = '#18191c'
+const APP_NAME = 'Capture Markup Tool'
+
+// Name the app and its data folder before anything uses them (the single-instance
+// lock lives in userData). %APPDATA%\CaptureMarkupTool holds settings and caches.
+app.setName(APP_NAME)
+app.setPath('userData', join(app.getPath('appData'), 'CaptureMarkupTool'))
+if (process.platform === 'win32') app.setAppUserModelId('com.jwatt.capturemarkuptool')
 
 let editor: BrowserWindow | null = null
 let editorReady = false
@@ -40,7 +47,7 @@ function createEditor(): void {
     minHeight: 560,
     show: false,
     backgroundColor: TITLEBAR,
-    title: 'Markup',
+    title: APP_NAME,
     icon: ICON,
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: TITLEBAR, symbolColor: '#c9ccd1', height: 36 },
@@ -180,10 +187,10 @@ function updateTrayMenu(): void {
       { label: `New capture${hotkey}`, click: () => void capture.start(false) },
       { label: 'Open editor', click: showEditor },
       { type: 'separator' },
-      { label: 'Quit Markup', click: requestQuit }
+      { label: `Quit ${APP_NAME}`, click: requestQuit }
     ])
   )
-  tray.setToolTip(settings.hotkey ? `Markup: ${prettyAccelerator(settings.hotkey)} to capture` : 'Markup')
+  tray.setToolTip(settings.hotkey ? `${APP_NAME}: ${prettyAccelerator(settings.hotkey)} to capture` : APP_NAME)
 }
 
 function copyPngToClipboard(png: Uint8Array): Promise<void> {
@@ -208,11 +215,11 @@ function registerIpc(): void {
       { name: 'PNG image', extensions: ['png'] },
       { name: 'JPEG image', extensions: ['jpg', 'jpeg'] },
       { name: 'WebP image', extensions: ['webp'] },
-      { name: 'Markup project (keeps layers)', extensions: ['imk'] }
+      { name: `${APP_NAME} project (keeps layers)`, extensions: ['imk'] }
     ]
     const first = all.find((f) => f.extensions[0] === kind) ?? all[0]
     const opts: Electron.SaveDialogOptions = {
-      // Start in the capture library: it's a folder Markup is known to be able to write to.
+      // Start in the capture library: a folder the app is known to be able to write to.
       defaultPath: isAbsolute(name) ? name : join(library.folder(), name),
       filters: [first, ...all.filter((f) => f !== first)]
     }
@@ -362,7 +369,7 @@ if (!app.requestSingleInstanceLock()) {
           if (saved.blockedFolder) {
             notify(
               `Windows blocked saving captures to ${saved.blockedFolder} (Controlled folder access), so they're going to ${library.folder()}. ` +
-                'Allow Markup in Windows Security > Ransomware protection, or pick another folder in File > Settings.'
+                'Pick another folder in File > Settings, or allow the app in Windows Security > Ransomware protection.'
             )
           }
         } catch (err) {
@@ -373,9 +380,9 @@ if (!app.requestSingleInstanceLock()) {
     })
     library = new Library(
       () => captureFolder(settings),
-      // Fallback when Windows blocks the chosen folder: visible in Explorer, not a
-      // protected folder, and outside AppData (which packaged launchers can redirect).
-      () => join(app.getPath('home'), 'Markup', 'Images'),
+      // If Windows blocks a folder picked in Settings, fall back to the default
+      // (in the user's own folder, which Controlled Folder Access doesn't guard).
+      () => defaultCaptureFolder(),
       () => settings.blockedFolder,
       (dir) => {
         if (settings.blockedFolder === dir) return

@@ -21,7 +21,7 @@ export function Welcome(): React.JSX.Element {
   return (
     <div className="welcome">
       <div className="welcome-card">
-        <h1>Markup</h1>
+        <h1>Capture Markup Tool</h1>
         <p className="welcome-sub">Capture, annotate, paint. Every arrow and label stays editable.</p>
         <div className="welcome-actions">
           <button className="big-btn accent" onClick={() => void startCapture()}>

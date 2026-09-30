@@ -67,7 +67,7 @@ export const BLEND_MODES: { value: BlendMode; label: string }[] = [
 ]
 
 export const PALETTES: Record<string, string[]> = {
-  Markup: [
+  Default: [
     '#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#007aff', '#5856d6', '#af52de',
     '#ff2d55', '#a2845e', '#ffffff', '#c7c7cc', '#8e8e93', '#48484a', '#1c1c1e', '#000000'
   ],
