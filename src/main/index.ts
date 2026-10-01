@@ -18,7 +18,10 @@ const APP_NAME = 'Capture Markup Tool'
 // Name the app and its data folder before anything uses them (the single-instance
 // lock lives in userData). %APPDATA%\CaptureMarkupTool holds settings and caches.
 app.setName(APP_NAME)
-app.setPath('userData', join(app.getPath('appData'), 'CaptureMarkupTool'))
+// Dev-only: CMT_USER_DATA gives a test instance its own settings (and its own
+// single-instance lock), so it can run beside the installed app.
+const devData = !app.isPackaged && process.env['CMT_USER_DATA']
+app.setPath('userData', devData || join(app.getPath('appData'), 'CaptureMarkupTool'))
 if (process.platform === 'win32') app.setAppUserModelId(APP_ID)
 
 let editor: BrowserWindow | null = null
@@ -406,6 +409,7 @@ if (!app.requestSingleInstanceLock()) {
         return true
       },
       restoreEditor: showEditor,
+      adjustRegions: () => settings.captureAdjust,
       onCaptured: async (png) => {
         if (settings.copyOnCapture) void copyPngToClipboard(png)
         // Open the editor first; saving to the library happens in the background

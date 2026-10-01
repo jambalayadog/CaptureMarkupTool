@@ -357,6 +357,14 @@ function SettingsDialog(): React.JSX.Element {
           </div>
           <p className="form-note">Works from anywhere while the app is running (it lives in the system tray).</p>
           <label className="check">
+            <input type="checkbox" checked={s.captureAdjust} onChange={(e) => setS({ ...s, captureAdjust: e.target.checked })} />
+            Adjust a dragged region before capturing it
+          </label>
+          <p className="form-note">
+            Arrow keys move the bottom-right corner and Shift+arrows the top-left (hold Ctrl for 10 px). Drag the edges or the
+            middle to adjust, then press Enter or double-click to capture. Turn this off to capture as soon as you let go.
+          </p>
+          <label className="check">
             <input type="checkbox" checked={s.autoSaveCaptures} onChange={(e) => setS({ ...s, autoSaveCaptures: e.target.checked })} />
             Save every capture to the library automatically
           </label>

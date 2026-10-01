@@ -696,9 +696,21 @@ export class Editor {
   }
 
   nextStepNumber(): number {
+    if (this.d?.stepNext != null) return this.d.stepNext
     let n = 0
     for (const l of this.d?.layers ?? []) if (l.kind === 'vector') for (const o of l.objects) if (o.type === 'step') n = Math.max(n, o.n)
     return n + 1
+  }
+
+  /** Choose the next step's number (1 restarts the count). Undoable. */
+  setStepNext(n: number): void {
+    const d = this.d
+    if (!d) return
+    const before = this.snapshot()
+    d.stepNext = null
+    // back to automatic when it's what automatic would give anyway
+    d.stepNext = n === this.nextStepNumber() ? null : Math.max(1, Math.round(n))
+    this.commit('Step numbering', before, [], 'step-next')
   }
 
   // ---- text editing ----------------------------------------------------------------
@@ -1638,13 +1650,21 @@ export class Editor {
     if (!ta || !o || !this.d) return
     const L = textLayout(o)
     const z = this.d.view.zoom
-    const s = this.toScreen({ x: o.x + L.pad, y: o.y + L.pad })
-    ta.style.left = `${s.x}px`
+    const s = this.toScreen({ x: o.x + L.pad, y: o.y + L.top })
+    const inner = (L.w - L.pad * 2) * z
+    const align = o.align ?? 'left'
+    // A fixed box wraps like the canvas does. A fitted box gets some slack for the
+    // next character, placed so the text stays where alignment puts it.
+    const slack = o.boxW != null ? 0 : o.fontSize * z * 0.8
+    const shift = align === 'center' ? slack / 2 : align === 'right' ? slack : 0
+    ta.style.left = `${s.x - shift}px`
     ta.style.top = `${s.y}px`
     ta.style.font = fontOf({ ...o, fontSize: o.fontSize * z })
     ta.style.lineHeight = `${L.lineH * z}px`
-    ta.style.width = `${(L.w - L.pad * 2) * z + o.fontSize * z * 0.8}px`
+    ta.style.width = `${inner + slack}px`
     ta.style.height = `${L.lines.length * L.lineH * z}px`
+    ta.style.whiteSpace = o.boxW != null ? 'pre-wrap' : 'pre'
+    ta.style.textAlign = align
     ta.style.color = o.color
     ta.style.caretColor = o.color
   }
@@ -1667,7 +1687,15 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
     case 'line':
       return { strokeWidth: o.width, arrowStart: o.start, arrowEnd: o.end, arrowHeadScale: o.headScale ?? 1, dashed: o.dashed, shadow: o.shadow }
     case 'text':
-      return { fontSize: o.fontSize, fontFamily: o.fontFamily, bold: o.bold, shadow: o.shadow, ...(o.tail ? {} : { textBg: !!o.bg }) }
+      return {
+        fontSize: o.fontSize,
+        fontFamily: o.fontFamily,
+        bold: o.bold,
+        shadow: o.shadow,
+        textAlign: o.align ?? 'left',
+        textVAlign: o.valign ?? 'top',
+        ...(o.tail ? {} : { textBg: !!o.bg })
+      }
     case 'step':
       return { stepSize: o.size, shadow: o.shadow }
     case 'path':
@@ -1706,6 +1734,8 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       if (k === 'bold') return set(o, { bold: v as boolean })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
       if (k === 'textBg' && !o.tail) return set(o, { bg: v ? ed.secondary : null })
+      if (k === 'textAlign') return set(o, { align: v as TextObj['align'] })
+      if (k === 'textVAlign') return set(o, { valign: v as TextObj['valign'] })
       return false
     case 'step':
       if (k === 'stepSize') return set(o, { size: v as number })

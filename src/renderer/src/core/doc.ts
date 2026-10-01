@@ -9,6 +9,7 @@ export interface Snapshot {
   height: number
   activeLayerId: string
   layers: Layer[]
+  stepNext: number | null
 }
 
 /** Pixel change on one raster layer, in that layer's canvas coordinates. */
@@ -82,6 +83,8 @@ export interface DocState {
   /** Pixel selection (rectangle, lasso or magic wand). */
   selection: Selection | null
   selectedIds: string[]
+  /** Number the next step gets (set to restart the count); null continues after the highest. */
+  stepNext: number | null
   live: LiveState
   /** Cached composite of all layers at document resolution. */
   comp: HTMLCanvasElement
@@ -108,6 +111,7 @@ export function createDoc(width: number, height: number, name: string, layers: L
     viewReady: false,
     selection: null,
     selectedIds: [],
+    stepNext: null,
     live: emptyLive(),
     comp: makeCanvas(width, height),
     compDirty: true
@@ -127,13 +131,14 @@ function copyLayer(l: Layer): Layer {
 }
 
 export function snapshot(d: DocState): Snapshot {
-  return { width: d.width, height: d.height, activeLayerId: d.activeLayerId, layers: d.layers.map(copyLayer) }
+  return { width: d.width, height: d.height, activeLayerId: d.activeLayerId, layers: d.layers.map(copyLayer), stepNext: d.stepNext }
 }
 
 export function restore(d: DocState, s: Snapshot): void {
   d.width = s.width
   d.height = s.height
   d.layers = s.layers.map(copyLayer)
+  d.stepNext = s.stepNext
   d.activeLayerId = d.layers.some((l) => l.id === s.activeLayerId) ? s.activeLayerId : (d.layers[d.layers.length - 1]?.id ?? '')
   const ids = new Set<string>()
   for (const l of d.layers) if (l.kind === 'vector') for (const o of l.objects) ids.add(o.id)

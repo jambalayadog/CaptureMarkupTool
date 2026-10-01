@@ -19,6 +19,8 @@ export interface CaptureHooks {
   hideEditor(): Promise<boolean>
   restoreEditor(): void
   onCaptured(png: Buffer): void
+  /** Whether a dragged region is adjusted before capturing (a setting). */
+  adjustRegions(): boolean
 }
 
 /** An overlay that hasn't said it's ready by then is shown anyway (it paints once visible). */
@@ -45,6 +47,11 @@ export class CaptureManager {
   constructor(private hooks: CaptureHooks) {
     ipcMain.on('capture:ready', (e) => this.onReady(e.sender))
     ipcMain.on('capture:finish', (e, rect) => this.finish(e.sender, rect))
+    ipcMain.on('capture:claim', (e) => {
+      for (const ov of this.overlays.values()) {
+        if (!ov.win.isDestroyed() && ov.win.webContents !== e.sender) ov.win.webContents.send('capture:clear')
+      }
+    })
     screen.on('display-added', () => this.disposeAll())
     screen.on('display-removed', () => this.disposeAll())
     screen.on('display-metrics-changed', () => this.disposeAll())
@@ -91,7 +98,8 @@ export class CaptureManager {
           windows: mapWindows(windows, d, size),
           cursor: onThis
             ? { x: ((cursor.x - b.x) * size.width) / b.width, y: ((cursor.y - b.y) * size.height) / b.height }
-            : null
+            : null,
+          adjust: this.hooks.adjustRegions()
         }
         ov.win.webContents.send('capture:show', ov.payload)
         shown++

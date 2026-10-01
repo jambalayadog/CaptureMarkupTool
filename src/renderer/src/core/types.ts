@@ -90,7 +90,16 @@ export interface TextObj {
   /** Speech-bubble pointer target (only drawn when bg is set). */
   tail: Vec | null
   shadow: boolean
+  /** Fixed box width, which the text wraps to. null sizes the box to the text. */
+  boxW: number | null
+  /** Box height when it's taller than the text needs (it always grows to fit). */
+  boxH: number | null
+  align: TextAlign
+  valign: TextVAlign
 }
+
+export type TextAlign = 'left' | 'center' | 'right'
+export type TextVAlign = 'top' | 'middle' | 'bottom'
 
 export interface StepObj {
   id: string
@@ -204,6 +213,8 @@ export interface ToolOptions {
   fontFamily: string
   bold: boolean
   textBg: boolean
+  textAlign: TextAlign
+  textVAlign: TextVAlign
   stepSize: number
   highlightWidth: number
   highlightOpacity: number

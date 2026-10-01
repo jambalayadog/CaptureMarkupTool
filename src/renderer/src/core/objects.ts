@@ -9,32 +9,82 @@ export const fontOf = (o: Pick<TextObj, 'bold' | 'fontSize' | 'fontFamily'>): st
   `${o.bold ? 700 : 400} ${o.fontSize}px ${o.fontFamily}`
 
 export interface TextLayout {
+  /** Lines after wrapping, as drawn. */
   lines: string[]
+  /** Width of each line, for alignment. */
+  widths: number[]
   lineH: number
   pad: number
   w: number
   h: number
+  /** Top of the first line, from the top of the box (vertical alignment). */
+  top: number
   /** Distance from the top of a line box to its baseline (CSS line-box model). */
   baseline: number
 }
 
+/**
+ * Word-wrap one paragraph to `maxW` the way a textarea with pre-wrap and
+ * overflow-wrap: break-word does, so editing and the final render agree.
+ */
+function wrapParagraph(text: string, maxW: number): string[] {
+  const width = (s: string): number => measure.measureText(s).width
+  if (width(text) <= maxW) return [text]
+  const out: string[] = []
+  let line = ''
+  for (let tok of text.match(/\s+|\S+\s*/g) ?? ['']) {
+    // trailing spaces hang past the edge, so they never force a wrap
+    if (width((line + tok).trimEnd()) <= maxW) {
+      line += tok
+      continue
+    }
+    if (line) out.push(line)
+    line = ''
+    // a word wider than the box breaks between characters
+    while (tok.trimEnd().length > 1 && width(tok.trimEnd()) > maxW) {
+      let n = 1
+      while (n < tok.length && width(tok.slice(0, n + 1)) <= maxW) n++
+      out.push(tok.slice(0, n))
+      tok = tok.slice(n)
+    }
+    line = tok
+  }
+  out.push(line)
+  return out
+}
+
 export function textLayout(o: TextObj): TextLayout {
   measure.font = fontOf(o)
-  const lines = o.text.split('\n')
-  const widths = lines.map((l) => measure.measureText(l).width)
   const m = measure.measureText('Mg')
   const asc = m.fontBoundingBoxAscent ?? o.fontSize * 0.8
   const desc = m.fontBoundingBoxDescent ?? o.fontSize * 0.2
   const lineH = Math.round(o.fontSize * 1.25)
   const pad = o.bg ? Math.round(o.fontSize * 0.45) : Math.round(o.fontSize * 0.12)
+  // older projects have no box or alignment fields
+  const boxW = o.boxW ?? null
+  const paragraphs = o.text.split('\n')
+  const lines = boxW == null ? paragraphs : paragraphs.flatMap((p) => wrapParagraph(p, Math.max(1, boxW - pad * 2)))
+  const widths = lines.map((l) => measure.measureText(boxW == null ? l : l.trimEnd()).width)
+  const natural = lines.length * lineH + pad * 2
+  const h = Math.max(natural, o.boxH ?? 0)
+  const valign = o.valign ?? 'top'
   return {
     lines,
+    widths,
     lineH,
     pad,
-    w: Math.ceil(Math.max(o.fontSize * 0.5, ...widths) + pad * 2),
-    h: lines.length * lineH + pad * 2,
+    w: boxW ?? Math.ceil(Math.max(o.fontSize * 0.5, ...widths) + pad * 2),
+    h,
+    top: pad + (valign === 'middle' ? (h - natural) / 2 : valign === 'bottom' ? h - natural : 0),
     baseline: (lineH - (asc + desc)) / 2 + asc
   }
+}
+
+/** Left edge of line `i`, following the object's horizontal alignment. */
+export function lineX(o: TextObj, L: TextLayout, i: number): number {
+  const room = L.w - L.pad * 2 - L.widths[i]
+  const align = o.align ?? 'left'
+  return o.x + L.pad + (align === 'center' ? room / 2 : align === 'right' ? room : 0)
 }
 
 // ---- drawing -------------------------------------------------------------------
@@ -199,7 +249,8 @@ function drawText(ctx: CanvasRenderingContext2D, o: TextObj, hideText: boolean):
   ctx.font = fontOf(o)
   ctx.fillStyle = o.color
   ctx.textBaseline = 'alphabetic'
-  L.lines.forEach((line, i) => ctx.fillText(line, o.x + L.pad, o.y + L.pad + i * L.lineH + L.baseline))
+  const wrapped = o.boxW != null
+  L.lines.forEach((line, i) => ctx.fillText(wrapped ? line.trimEnd() : line, lineX(o, L, i), o.y + L.top + i * L.lineH + L.baseline))
 }
 
 function drawStep(ctx: CanvasRenderingContext2D, o: StepObj): void {
@@ -426,8 +477,11 @@ export function handlesOf(o: VObj): Handle[] {
         { id: 'p1', x: o.x1, y: o.y1 },
         { id: 'p2', x: o.x2, y: o.y2 }
       ]
-    case 'text':
-      return o.tail && o.bg ? [{ id: 'tail', x: o.tail.x, y: o.tail.y }] : []
+    case 'text': {
+      // the box resizes (text wraps to it); a callout's pointer has its own handle
+      const box = rectHandles(objBounds(o))
+      return o.tail && o.bg ? [...box, { id: 'tail', x: o.tail.x, y: o.tail.y }] : box
+    }
     default:
       return []
   }
@@ -491,6 +545,20 @@ export function dragHandle(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boo
     }
   } else if (o.type === 'text' && id === 'tail') {
     o.tail = { x: p.x, y: p.y }
+  } else if (o.type === 'text' && orig.type === 'text') {
+    // Resizing a text box changes the box, not the font: width wraps the text, and
+    // height can add room (it never shrinks past the text).
+    const r = dragRectHandle(objBounds(orig), id, p, false)
+    if (id.includes('e') || id.includes('w')) {
+      const L = textLayout(orig)
+      o.boxW = Math.max(Math.ceil(o.fontSize + L.pad * 2), Math.round(r.w))
+      o.x = id.includes('w') ? Math.round(r.x + r.w - o.boxW) : Math.round(r.x)
+    }
+    if (id.includes('n') || id.includes('s')) {
+      const natural = textLayout({ ...o, boxH: null }).h
+      o.boxH = Math.max(natural, Math.round(r.h))
+      o.y = id.includes('n') ? Math.round(r.y + r.h - o.boxH) : Math.round(r.y)
+    }
   }
 }
 
@@ -585,6 +653,8 @@ export function transformObject(o: VObj, map: (p: Vec) => Vec, scale: number): v
       const before = textLayout(o)
       const c = map({ x: o.x + before.w / 2, y: o.y + before.h / 2 })
       o.fontSize = Math.max(4, o.fontSize * scale)
+      if (o.boxW != null) o.boxW *= scale
+      if (o.boxH != null) o.boxH *= scale
       const after = textLayout(o)
       o.x = c.x - after.w / 2
       o.y = c.y - after.h / 2

@@ -30,6 +30,8 @@ export interface Settings {
   copyOnCapture: boolean
   /** Closing the editor window hides it to the tray instead of quitting. */
   closeToTray: boolean
+  /** After dragging a capture region, adjust it (arrow keys, handles) and press Enter to capture. */
+  captureAdjust: boolean
   /** The mouse wheel zooms the canvas (off: it scrolls, and Ctrl+wheel zooms). */
   wheelZoom: boolean
   /** Start in the tray when Windows starts (read from and written to the registry, not settings.json). */
@@ -110,6 +112,8 @@ export interface CaptureShowPayload {
   windows: CaptureWindowRect[]
   /** Cursor position in screenshot pixels, if the cursor is on this display. */
   cursor: { x: number; y: number } | null
+  /** A dragged region stays up for adjusting until Enter (otherwise it's captured on release). */
+  adjust: boolean
 }
 
 export interface CaptureApi {
@@ -117,4 +121,7 @@ export interface CaptureApi {
   onHide(cb: () => void): void
   ready(): void
   finish(rect: { x: number; y: number; w: number; h: number } | null): void
+  /** This display started a new region: the others drop theirs. */
+  claim(): void
+  onClear(cb: () => void): void
 }

@@ -2,9 +2,9 @@
 
 A layered screenshot and image markup editor for Windows, somewhere between Snipping Tool, Snagit, Greenshot, Aseprite and a very small Photoshop.
 
-- **Capture**: global hotkey (default **Ctrl+PrintScreen**) freezes every display. Drag a region, click a window, or press Enter for the whole screen. It lives in the system tray.
+- **Capture**: global hotkey (default **Ctrl+PrintScreen**) freezes every display. Drag a region, click a window, or press Enter for the whole screen. A dragged region stays up to fine-tune: arrow keys move its bottom-right corner, Shift+arrows its top-left (Ctrl for 10 px), or drag its edges, then press Enter. It lives in the system tray.
 - **Capture library**: every capture is saved to `%USERPROFILE%\CaptureMarkupTool\Images` (configurable in Settings) and shows up in the *Recent captures* strip under the canvas. Click one to reopen it, drag it straight into Slack or email, or right-click to copy, show it in the folder, or send it to the Recycle Bin. Ctrl+S on a capture updates its library file. The default folder avoids Pictures and Videos on purpose: Windows' Controlled folder access guards those from unrecognized apps. If you pick a folder in Settings that Windows blocks, captures fall back to the default and Settings explains why.
-- **Annotate**: arrows, lines, rectangles, ellipses, text, callouts, numbered steps, highlighter, and blur/pixelate/solid redaction. They stay editable: select one to move it, resize it, or restyle it from the options bar.
+- **Annotate**: arrows (with adjustable heads), lines, rectangles, ellipses, text and callouts (resizable boxes that wrap, with left/centre/right and top/middle/bottom alignment), numbered steps (renumber any step, or restart the count), highlighter, and blur/pixelate/solid redaction. They stay editable: select one to move it, resize it, or restyle it from the options bar.
 - **Paint**: anti-aliased brush with pen pressure, a pixel pencil with pixel-perfect lines, eraser, flood fill, eyedropper and a pixel grid at 800% and up. It comes with palettes (PICO-8, Endesga 32 and others).
 - **Selections**: rectangle (M), lasso (Q: drag freehand, or click point by point) and magic wand (W). Hold Shift to add, Alt to subtract, both to intersect, or pick a mode in the options bar. Brushes, fill, clear, copy and adjustments all respect the selection's exact shape. Ctrl+Shift+I inverts it.
 - **Free transform** (Ctrl+T): scale, rotate, move and flip a pixel layer, or just the selected pixels. Shift keeps proportions or snaps rotation to 15°, and Alt scales from the centre. Turn Smooth off to keep hard pixel edges for pixel art. Enter applies and Esc cancels.
@@ -39,6 +39,7 @@ In development, **F12** opens DevTools and **F5** reloads. By default, closing t
 Development-only hooks, all ignored in packaged builds:
 
 - `CMT_CAPTURE_DIR=<folder>` sends captures to a scratch folder instead of your real library.
+- `CMT_USER_DATA=<folder>` gives a test instance its own settings, so it runs alongside the installed app instead of handing off to it.
 - `electron . --capture-test` runs the whole capture pipeline on a 64×64 corner of the primary display, without showing the overlay.
 - `electron . --debug-shot=<file.png>` saves a PNG of the editor window's own contents.
 

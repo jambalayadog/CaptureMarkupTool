@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkey: 'CommandOrControl+PrintScreen',
   copyOnCapture: false,
   closeToTray: true,
+  captureAdjust: true,
   wheelZoom: true,
   openAtLogin: false,
   autoSaveCaptures: true,

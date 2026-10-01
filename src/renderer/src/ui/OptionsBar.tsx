@@ -1,10 +1,14 @@
 import {
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowUpDown,
   ArrowUpToLine,
   Bold,
   Copy,
+  ListRestart,
   Maximize,
   Minus,
   Plus,
@@ -15,13 +19,16 @@ import {
   SquaresIntersect,
   SquaresSubtract,
   SquaresUnite,
+  TextAlignCenter,
+  TextAlignEnd,
+  TextAlignStart,
   Trash,
   Undo2
 } from 'lucide-react'
 import { FONTS, HIGHLIGHT_COLORS } from '../core/constants'
 import type { Editor } from '../core/editor'
 import { cropToSelection } from '../core/imageOps'
-import type { Head, SelectMode, ToolOptions, VObj } from '../core/types'
+import type { Head, SelectMode, StepObj, TextAlign, TextVAlign, ToolOptions, VObj } from '../core/types'
 import { applyCrop, resetCrop } from '../tools/region'
 import { adjustTransform, finishTransform } from '../tools/transform'
 import { Divider, IconBtn, Num, Seg, Sel, Toggle } from './controls'
@@ -51,6 +58,39 @@ function styleOf(o: VObj): string {
     default:
       return o.type
   }
+}
+
+const ALIGNS: { value: TextAlign; label: React.ReactNode; title: string }[] = [
+  { value: 'left', label: <TextAlignStart size={14} />, title: 'Align left' },
+  { value: 'center', label: <TextAlignCenter size={14} />, title: 'Centre' },
+  { value: 'right', label: <TextAlignEnd size={14} />, title: 'Align right' }
+]
+
+const VALIGNS: { value: TextVAlign; label: React.ReactNode; title: string }[] = [
+  { value: 'top', label: <AlignVerticalJustifyStart size={14} />, title: 'Top (when the box is taller than the text)' },
+  { value: 'middle', label: <AlignVerticalJustifyCenter size={14} />, title: 'Middle (when the box is taller than the text)' },
+  { value: 'bottom', label: <AlignVerticalJustifyEnd size={14} />, title: 'Bottom (when the box is taller than the text)' }
+]
+
+/** Alignment, plus "Fit" for a text box that's been resized. */
+function TextBoxOptions({ ed }: { ed: Editor }): React.JSX.Element {
+  const o = ed.opts
+  const sized = ed.selectedObjects().some((t) => t.type === 'text' && (t.boxW != null || t.boxH != null))
+  return (
+    <>
+      <Seg value={o.textAlign} options={ALIGNS} onChange={(v) => ed.setOpt('textAlign', v)} />
+      <Seg value={o.textVAlign} options={VALIGNS} onChange={(v) => ed.setOpt('textVAlign', v)} />
+      {sized && (
+        <button
+          className="btn"
+          title="Size the box to fit the text again"
+          onClick={() => ed.updateSelected((t) => t.type === 'text' && Object.assign(t, { boxW: null, boxH: null }), 'Fit text box')}
+        >
+          Fit
+        </button>
+      )}
+    </>
+  )
 }
 
 function Swatch({ color }: { color: string }): React.JSX.Element {
@@ -123,25 +163,56 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           <Toggle active={o.textBg} title="Background box in the secondary colour" onClick={() => ed.setOpt('textBg', !o.textBg)}>
             <Swatch color={ed.secondary} /> Background
           </Toggle>
+          <TextBoxOptions ed={ed} />
           {shadow}
+          {ed.tool === 'text' && <span className="opt-hint">Drag to draw a box the text wraps in</span>}
         </>
       )
     case 'callout':
       return (
         <>
           {font}
+          <TextBoxOptions ed={ed} />
           {shadow}
           <span className="opt-hint">Bubble uses the primary colour</span>
         </>
       )
-    case 'step':
+    case 'step': {
+      const steps = ed.selectedObjects().filter((s): s is StepObj => s.type === 'step')
       return (
         <>
           <Num label="Size" value={o.stepSize} min={12} max={160} onChange={set_('stepSize')} />
           {shadow}
-          <span className="opt-hint">Next number: {ed.nextStepNumber()}</span>
+          {steps.length === 1 && (
+            <Num
+              label="Number"
+              value={steps[0].n}
+              min={0}
+              max={999}
+              slider={false}
+              title="Number on the selected step"
+              onChange={(v) => ed.updateSelected((s) => s.type === 'step' && (s.n = Math.round(v)), 'Renumber step', 'step-n')}
+            />
+          )}
+          {ed.tool === 'step' && (
+            <>
+              <Num
+                label="Next"
+                value={ed.nextStepNumber()}
+                min={0}
+                max={999}
+                slider={false}
+                title="Number the next step you place gets"
+                onChange={(v) => ed.setStepNext(v)}
+              />
+              <IconBtn title="Restart numbering at 1" onClick={() => ed.setStepNext(1)}>
+                <ListRestart size={15} />
+              </IconBtn>
+            </>
+          )}
         </>
       )
+    }
     case 'highlight':
       return (
         <>

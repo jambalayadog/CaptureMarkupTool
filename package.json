@@ -1,7 +1,7 @@
 {
   "name": "capture-markup-tool",
   "productName": "Capture Markup Tool",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Capture Markup Tool: a layered screenshot and image markup editor (annotations, pixel art, photo basics).",
   "main": "./out/main/index.js",
   "author": "jw",

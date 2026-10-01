@@ -40,7 +40,9 @@ const captureApi: CaptureApi = {
   onShow: (cb) => void listen('capture:show', cb),
   onHide: (cb) => void listen('capture:hide', cb),
   ready: () => ipcRenderer.send('capture:ready'),
-  finish: (rect) => ipcRenderer.send('capture:finish', rect)
+  finish: (rect) => ipcRenderer.send('capture:finish', rect),
+  claim: () => ipcRenderer.send('capture:claim'),
+  onClear: (cb) => void listen('capture:clear', cb)
 }
 
 contextBridge.exposeInMainWorld('api', api)
