@@ -89,6 +89,8 @@ export interface EditorApi {
   trashFile(path: string): Promise<boolean>
   startDrag(path: string): void
   openLibraryFolder(): void
+  /** Open the project's GitHub page in the default browser. */
+  openProjectPage(): void
   /** Test the chosen library folder again (after allowing the app in Windows Security). */
   retryLibraryFolder(): Promise<{ ok: boolean; folder: string }>
   onLibraryChanged(cb: () => void): () => void

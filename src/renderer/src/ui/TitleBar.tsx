@@ -137,7 +137,11 @@ function buildMenus(ed: Editor): { name: string; items: Item[] }[] {
     },
     {
       name: 'Help',
-      items: [{ label: 'Keyboard shortcuts', shortcut: 'F1', action: () => ed.showDialog('shortcuts') }]
+      items: [
+        { label: 'Keyboard shortcuts', shortcut: 'F1', action: () => ed.showDialog('shortcuts') },
+        'sep',
+        { label: 'About Capture Markup Tool', action: () => ed.showDialog('about') }
+      ]
     }
   ]
 }

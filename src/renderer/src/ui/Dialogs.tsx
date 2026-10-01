@@ -1,4 +1,5 @@
-import { X } from 'lucide-react'
+import { ExternalLink, X } from 'lucide-react'
+import iconUrl from '../../../../resources/icon.png'
 import { useEffect, useState } from 'react'
 import type { LibraryListing, Settings } from '../../../shared/api'
 import { applyFilter, resizeCanvas, resizeImage } from '../core/imageOps'
@@ -494,6 +495,40 @@ function ShortcutsDialog(): React.JSX.Element {
   )
 }
 
+const PROJECT_URL = 'https://github.com/jambalayadog/CaptureMarkupTool'
+
+/** "Electron 44.5.1 · Chromium 140.0.1" from the user agent (useful in bug reports). */
+function runtimeVersions(): string {
+  const ua = navigator.userAgent
+  const electron = /Electron\/([\d.]+)/.exec(ua)?.[1]
+  const chrome = /Chrome\/([\d.]+)/.exec(ua)?.[1]
+  return [electron && `Electron ${electron}`, chrome && `Chromium ${chrome}`].filter(Boolean).join(' · ') || ua
+}
+
+function AboutDialog(): React.JSX.Element {
+  return (
+    <Modal title="About" onClose={close}>
+      <div className="about">
+        <img src={iconUrl} alt="" width={64} height={64} />
+        <h2>Capture Markup Tool</h2>
+        <div className="about-version">Version {__APP_VERSION__}</div>
+        <p>Capture, annotate, paint. Every arrow and label stays editable.</p>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => (api ? api.openProjectPage() : window.open(PROJECT_URL, '_blank', 'noopener'))}
+        >
+          <ExternalLink size={14} /> Project page on GitHub
+        </button>
+        <div className="about-meta">
+          <div>MIT License · © 2026 jw</div>
+          <div>{runtimeVersions()}</div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 export function Dialogs(): React.JSX.Element | null {
   const ed = useEditor()
   switch (ed.dialog) {
@@ -509,6 +544,8 @@ export function Dialogs(): React.JSX.Element | null {
       return <SettingsDialog />
     case 'shortcuts':
       return <ShortcutsDialog />
+    case 'about':
+      return <AboutDialog />
     default:
       return null
   }

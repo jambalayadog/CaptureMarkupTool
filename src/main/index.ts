@@ -14,6 +14,7 @@ const PRELOAD = join(__dirname, '../preload/index.js')
 const OPENABLE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.imk'])
 const TITLEBAR = '#18191c'
 const APP_NAME = 'Capture Markup Tool'
+const PROJECT_URL = 'https://github.com/jambalayadog/CaptureMarkupTool'
 
 // Name the app and its data folder before anything uses them (the single-instance
 // lock lives in userData). %APPDATA%\CaptureMarkupTool holds settings and caches.
@@ -326,6 +327,8 @@ function registerIpc(): void {
   })
 
   ipcMain.on('app:quit', requestQuit)
+  // a fixed address: the page can't ask the app to open arbitrary links
+  ipcMain.on('app:openProjectPage', () => void shell.openExternal(PROJECT_URL))
 
   // ---- capture library ----
   ipcMain.handle('library:list', async () => ({

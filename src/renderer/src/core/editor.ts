@@ -58,7 +58,7 @@ import {
   union
 } from './util'
 
-export type DialogKind = 'new' | 'resize' | 'canvasSize' | 'adjust' | 'settings' | 'shortcuts'
+export type DialogKind = 'new' | 'resize' | 'canvasSize' | 'adjust' | 'settings' | 'shortcuts' | 'about'
 
 interface TextEditState {
   id: string

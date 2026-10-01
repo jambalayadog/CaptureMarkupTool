@@ -1088,6 +1088,43 @@ canvas.view {
   color: var(--text3);
 }
 
+.about {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  text-align: center;
+}
+
+.about h2 {
+  margin: 6px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.about-version {
+  color: var(--text3);
+}
+
+.about p {
+  margin: 6px 0 10px;
+  color: var(--text2);
+}
+
+.about .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.about-meta {
+  margin-top: 14px;
+  color: var(--text3);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .context-menu {
   position: fixed;
   min-width: 190px;
