@@ -1,5 +1,5 @@
 import { BrowserWindow, desktopCapturer, ipcMain, screen, type Display, type NativeImage, type WebContents } from 'electron'
-import { listWindows, type NativeWindow } from './windows'
+import { forceForeground, listWindows, type NativeWindow } from './windows'
 import type { CaptureShowPayload, CaptureWindowRect } from '../shared/api'
 
 interface Overlay {
@@ -47,9 +47,12 @@ export class CaptureManager {
   constructor(private hooks: CaptureHooks) {
     ipcMain.on('capture:ready', (e) => this.onReady(e.sender))
     ipcMain.on('capture:finish', (e, rect) => this.finish(e.sender, rect))
+    // An overlay was pressed: give it keyboard focus, and clear any region on the others.
     ipcMain.on('capture:claim', (e) => {
       for (const ov of this.overlays.values()) {
-        if (!ov.win.isDestroyed() && ov.win.webContents !== e.sender) ov.win.webContents.send('capture:clear')
+        if (ov.win.isDestroyed()) continue
+        if (ov.win.webContents === e.sender) this.focus(ov)
+        else ov.win.webContents.send('capture:clear')
       }
     })
     screen.on('display-added', () => this.disposeAll())
@@ -159,9 +162,19 @@ export class CaptureManager {
     ov.win.setBounds(ov.display.bounds) // re-apply: Windows can mis-size across mixed-DPI displays
     const cursor = screen.getCursorScreenPoint()
     const b = ov.display.bounds
-    if (cursor.x >= b.x && cursor.x < b.x + b.width && cursor.y >= b.y && cursor.y < b.y + b.height) {
-      ov.win.focus()
-    }
+    if (cursor.x >= b.x && cursor.x < b.x + b.width && cursor.y >= b.y && cursor.y < b.y + b.height) this.focus(ov)
+  }
+
+  /**
+   * Keyboard focus for an overlay (arrow keys, Enter, typing in the toolbar).
+   * win.focus() alone isn't enough: Windows keeps the previous app in front while
+   * Electron reports the overlay as focused, so don't trust isFocused() here.
+   */
+  private focus(ov: Overlay): void {
+    if (ov.win.isDestroyed()) return
+    ov.win.focus()
+    if (!forceForeground(ov.win.getNativeWindowHandle())) console.warn('[capture] Windows kept another app in front')
+    ov.win.webContents.focus()
   }
 
   private finish(sender: WebContents, rect: { x: number; y: number; w: number; h: number } | null): void {

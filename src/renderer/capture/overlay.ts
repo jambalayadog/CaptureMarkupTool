@@ -37,6 +37,9 @@ const GRIP_CURSORS: Record<Grip, string> = {
   move: 'move'
 }
 const canvas = document.getElementById('c') as HTMLCanvasElement
+const toolbar = document.getElementById('tb') as HTMLDivElement
+const sizeText = document.getElementById('tb-size') as HTMLSpanElement
+const fields = Array.from(toolbar.querySelectorAll('input')) as HTMLInputElement[]
 const ctx = canvas.getContext('2d')!
 const shot = document.createElement('canvas')
 const shotCtx = shot.getContext('2d')!
@@ -99,6 +102,7 @@ function reset(): void {
   focus = null
   dropped = false
   canvas.style.cursor = ''
+  toolbar.hidden = true
 }
 
 function hide(): void {
@@ -144,7 +148,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 function gripAt(p: Pt): Grip | null {
   const r = region
   if (!r) return null
-  const t = 7 * scale()
+  const t = 10 * scale()
   const nearL = Math.abs(p.x - r.x) <= t
   const nearR = Math.abs(p.x - (r.x + r.w)) <= t
   const nearT = Math.abs(p.y - r.y) <= t
@@ -180,26 +184,59 @@ function applyGrip(g: NonNullable<typeof grip>, p: Pt): R {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 
+type Field = 'x1' | 'y1' | 'x2' | 'y2'
+
+/** The region's corner pixels: top-left (x1, y1) and bottom-right (x2, y2), both inside it. */
+function corners(r: R): Record<Field, number> {
+  return { x1: r.x, y1: r.y, x2: r.x + r.w - 1, y2: r.y + r.h - 1 }
+}
+
+/** Move one corner coordinate (keyboard, toolbar, typing). The loupe follows that corner. */
+function setCorner(f: Field, v: number): void {
+  const r = region
+  if (!r || !Number.isFinite(v)) return
+  const c = corners(r)
+  v = Math.round(v)
+  if (f === 'x1') c.x1 = clamp(v, 0, c.x2)
+  if (f === 'y1') c.y1 = clamp(v, 0, c.y2)
+  if (f === 'x2') c.x2 = clamp(v, c.x1, shot.width - 1)
+  if (f === 'y2') c.y2 = clamp(v, c.y1, shot.height - 1)
+  region = { x: c.x1, y: c.y1, w: c.x2 - c.x1 + 1, h: c.y2 - c.y1 + 1 }
+  focus = f === 'x1' || f === 'y1' ? { x: c.x1, y: c.y1 } : { x: c.x2, y: c.y2 }
+  requestDraw()
+}
+
 /** Arrow keys: move the bottom-right corner, or with Shift the top-left one. */
 function nudge(key: string, shift: boolean, big: boolean): void {
-  const r = region
-  if (!r) return
+  if (!region) return
   const step = big ? 10 : 1
-  const dx = key === 'ArrowLeft' ? -step : key === 'ArrowRight' ? step : 0
-  const dy = key === 'ArrowUp' ? -step : key === 'ArrowDown' ? step : 0
-  if (shift) {
-    const x = clamp(r.x + dx, 0, r.x + r.w - 1)
-    const y = clamp(r.y + dy, 0, r.y + r.h - 1)
-    region = { x, y, w: r.x + r.w - x, h: r.y + r.h - y }
-    focus = { x, y }
-  } else {
-    const w = clamp(r.w + dx, 1, shot.width - r.x)
-    const h = clamp(r.h + dy, 1, shot.height - r.y)
-    region = { x: r.x, y: r.y, w, h }
-    // the last pixel inside the region
-    focus = { x: r.x + w - 1, y: r.y + h - 1 }
+  const c = corners(region)
+  const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
+  const d = key === 'ArrowLeft' || key === 'ArrowUp' ? -step : step
+  const f: Field = shift ? (horizontal ? 'x1' : 'y1') : horizontal ? 'x2' : 'y2'
+  setCorner(f, c[f] + d)
+}
+
+/** Keep the toolbar's numbers current and place it next to the region. */
+function updateToolbar(): void {
+  const r = region
+  toolbar.hidden = !r
+  if (!r) return
+  const c = corners(r)
+  for (const input of fields) {
+    // don't fight the user while they're typing
+    if (document.activeElement !== input) input.value = String(c[input.dataset['f'] as Field])
   }
-  requestDraw()
+  sizeText.textContent = `${r.w} × ${r.h}`
+  const s = scale()
+  const tw = toolbar.offsetWidth
+  const th = toolbar.offsetHeight
+  const gap = 12
+  let top = (r.y + r.h) / s + gap
+  if (top + th > window.innerHeight - 8) top = r.y / s - th - gap
+  if (top < 8) top = Math.min(window.innerHeight - th - 8, (r.y + r.h) / s - th - gap)
+  toolbar.style.left = `${clamp(r.x / s, 8, Math.max(8, window.innerWidth - tw - 8))}px`
+  toolbar.style.top = `${Math.max(8, top)}px`
 }
 
 function requestDraw(): void {
@@ -236,12 +273,13 @@ function draw(): void {
   }
   const target = focus ?? mouse
   if (target) drawLoupe(target, s)
-  if (region) drawHint('Arrows move the bottom-right corner · Shift+arrows the top-left · Enter or double-click to capture · Esc to cancel', s)
+  if (region) drawHint('Drag the edges, use the controls, or arrows (Shift: top-left) · Enter or double-click to capture · Esc to cancel', s)
   else if (!mouse) drawHint('Drag to capture a region · Click a window · Enter for full screen · Esc to cancel', s)
+  updateToolbar()
 }
 
 function drawGrips(r: R, s: number): void {
-  const size = Math.round(8 * s)
+  const size = Math.round(10 * s)
   const pts = [
     [r.x, r.y],
     [r.x + r.w / 2, r.y],
@@ -395,6 +433,8 @@ window.addEventListener('mouseleave', () => {
 window.addEventListener('mousedown', (e) => {
   if (e.button === 2) return cancel()
   if (!active || e.button !== 0) return
+  // Windows doesn't always give the overlay keyboard focus: ask for it on every press
+  window.captureApi.claim()
   mouse = toShot(e)
   focus = null
   dropped = false
@@ -409,8 +449,6 @@ window.addEventListener('mousedown', (e) => {
     dropped = true
     canvas.style.cursor = ''
   }
-  // a new region here drops one being adjusted on another display
-  window.captureApi.claim()
   dragStart = { ...mouse }
   requestDraw()
 })
@@ -443,12 +481,62 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') return cancel()
   if (!active) return
   if (e.key === 'Enter') return finish(region ?? { x: 0, y: 0, w: shot.width, h: shot.height })
+  if (e.target instanceof HTMLInputElement) return
   if (region && e.key.startsWith('Arrow')) {
     e.preventDefault()
     nudge(e.key, e.shiftKey, e.ctrlKey)
   }
 })
 window.addEventListener('resize', requestDraw)
+
+// ---- toolbar ---------------------------------------------------------------------
+
+// Clicks on the toolbar mustn't start a new region underneath it.
+for (const type of ['mousedown', 'mouseup', 'dblclick'] as const) {
+  toolbar.addEventListener(type, (e) => {
+    e.stopPropagation()
+    if (type === 'mousedown') window.captureApi.claim()
+  })
+}
+toolbar.addEventListener('mousemove', (e) => e.stopPropagation())
+
+const fieldValue = (f: Field): number => (region ? corners(region)[f] : 0)
+
+for (const input of fields) {
+  const f = input.dataset['f'] as Field
+  input.addEventListener('input', () => {
+    if (input.value.trim() !== '') setCorner(f, Number(input.value))
+  })
+  input.addEventListener('blur', () => requestDraw())
+  input.addEventListener('wheel', (e) => {
+    e.preventDefault()
+    setCorner(f, fieldValue(f) + (e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1))
+    input.value = String(fieldValue(f))
+  })
+}
+
+// − / + steppers: Shift steps 10 px, and holding one down repeats.
+for (const btn of Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button[data-f]'))) {
+  const f = btn.dataset['f'] as Field
+  const d = Number(btn.dataset['d'])
+  let delay = 0
+  let repeat = 0
+  const stop = (): void => {
+    clearTimeout(delay)
+    clearInterval(repeat)
+  }
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    const step = (): void => setCorner(f, fieldValue(f) + d * (e.shiftKey ? 10 : 1))
+    step()
+    delay = window.setTimeout(() => (repeat = window.setInterval(step, 50)), 350)
+  })
+  btn.addEventListener('pointerup', stop)
+  btn.addEventListener('pointerleave', stop)
+}
+
+document.getElementById('tb-ok')!.addEventListener('click', () => region && finish(region))
+document.getElementById('tb-cancel')!.addEventListener('click', () => cancel())
 
 window.captureApi.onShow(show)
 window.captureApi.onHide(hide)

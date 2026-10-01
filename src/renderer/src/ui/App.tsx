@@ -88,6 +88,12 @@ export function App(): React.JSX.Element {
     // Messages from the main process are warnings/errors: keep them up until dismissed.
     const offNotify = api?.onNotify((text) => editor.warn(text))
     const offOpen = api?.onOpenFiles((files) => void editor.openFiles(files))
+    const offUpdate = api?.onUpdateReady((version) =>
+      editor.notify(`Version ${version} is ready. It installs when you quit, or restart now.`, 'sticky', {
+        label: 'Restart now',
+        run: () => api?.installUpdate()
+      })
+    )
     void api?.getSettings().then((s) => {
       editor.wheelZooms = s.wheelZoom
     })
@@ -103,6 +109,7 @@ export function App(): React.JSX.Element {
       offSaved?.()
       offNotify?.()
       offOpen?.()
+      offUpdate?.()
     }
   }, [ed])
 
@@ -134,6 +141,18 @@ export function App(): React.JSX.Element {
       {ed.toast && (
         <div className={ed.toast.sticky ? 'toast sticky' : 'toast'} key={ed.toast.id} role="status">
           <span className="toast-text">{ed.toast.text}</span>
+          {ed.toast.action && (
+            <button
+              className="btn primary toast-action"
+              onClick={() => {
+                const run = ed.toast?.action?.run
+                ed.dismissToast()
+                run?.()
+              }}
+            >
+              {ed.toast.action.label}
+            </button>
+          )}
           <button className="toast-close" title="Dismiss" onClick={() => ed.dismissToast()}>
             <X size={14} />
           </button>

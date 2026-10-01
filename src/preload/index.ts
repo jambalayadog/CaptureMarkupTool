@@ -32,6 +32,9 @@ const api: EditorApi = {
   startDrag: (path) => ipcRenderer.send('library:startDrag', path),
   openLibraryFolder: () => ipcRenderer.send('library:openFolder'),
   openProjectPage: () => ipcRenderer.send('app:openProjectPage'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.send('update:install'),
+  onUpdateReady: (cb) => listen('update:ready', cb),
   retryLibraryFolder: () => ipcRenderer.invoke('library:retry'),
   onLibraryChanged: (cb) => listen('library:changed', () => cb()),
   chooseFolder: (current) => ipcRenderer.invoke('settings:chooseFolder', current)

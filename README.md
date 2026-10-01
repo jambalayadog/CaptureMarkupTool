@@ -14,7 +14,9 @@ A layered screenshot and image markup editor for Windows, somewhere between Snip
 
 ## Install
 
-Windows 10 or 11 (64-bit). Download `Capture Markup Tool Setup <version>.exe` from the [Releases page](https://github.com/jambalayadog/CaptureMarkupTool/releases) and run it. It installs just for you, with no admin prompt, and adds a Start menu shortcut. Uninstall it from *Settings → Apps* like anything else.
+Windows 10 or 11 (64-bit). Download `CaptureMarkupTool-Setup-<version>.exe` from the [Releases page](https://github.com/jambalayadog/CaptureMarkupTool/releases) and run it. It installs just for you, with no admin prompt, and adds a Start menu shortcut. Uninstall it from *Settings → Apps* like anything else.
+
+It keeps itself up to date: it checks the Releases page now and then, downloads new versions in the background, and installs them when you quit (or straight away with **Restart now**). *Help → Check for updates* checks on demand.
 
 The installer isn't code-signed, so Windows SmartScreen will say it *protected your PC* the first time. Click **More info → Run anyway**.
 
@@ -28,6 +30,7 @@ npm run dev        # Electron app with hot reload for the UI
 npm run dev:web    # just the editor UI in a browser at http://localhost:5199
 npm run typecheck
 npm run dist       # Windows installer in dist/
+npm run release    # build and publish a GitHub release (bump the version, commit and push first)
 ```
 
 To start the dev app without a terminal window, double-click `scripts\start-dev.vbs` (output goes to `dev.log`). If the app is already running, it just brings the window up. Launching it through Explorer also avoids a quirk: apps started from inside another packaged app (such as the Claude desktop app) have their AppData writes silently redirected into that app's private folder.

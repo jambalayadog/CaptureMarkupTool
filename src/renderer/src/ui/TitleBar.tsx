@@ -5,7 +5,7 @@ import { applyFilter, cropToSelection, flattenImage, mergeDown, rasterizeLayer, 
 import { api, isElectron, readClipboardImage } from '../core/platform'
 import { decodeImage } from '../core/io'
 import { startCapture } from './App'
-import { useEditor } from './state'
+import { editor, useEditor } from './state'
 import iconUrl from '../../../../resources/icon.png'
 
 type Item = { label: string; shortcut?: string; action: () => void; disabled?: boolean; checked?: boolean } | 'sep'
@@ -140,6 +140,7 @@ function buildMenus(ed: Editor): { name: string; items: Item[] }[] {
       items: [
         { label: 'Keyboard shortcuts', shortcut: 'F1', action: () => ed.showDialog('shortcuts') },
         'sep',
+        ...(api ? [{ label: 'Check for updates', action: () => void checkForUpdates() }] : []),
         { label: 'About Capture Markup Tool', action: () => ed.showDialog('about') }
       ]
     }
@@ -205,6 +206,22 @@ function MenuBar(): React.JSX.Element {
       ))}
     </div>
   )
+}
+
+async function checkForUpdates(): Promise<void> {
+  if (!api) return
+  const ed = editor
+  ed.notify('Checking for updates…')
+  const r = await api.checkForUpdates()
+  if (r.state === 'latest') ed.notify(`You're on the latest version (${r.current})`, 4000)
+  else if (r.state === 'downloading') ed.notify(`Downloading version ${r.version}. You'll get a prompt when it's ready.`, 5000)
+  else if (r.state === 'ready')
+    ed.notify(`Version ${r.version} is ready. It installs when you quit, or restart now.`, 'sticky', {
+      label: 'Restart now',
+      run: () => api?.installUpdate()
+    })
+  else if (r.state === 'dev') ed.warn('Updates only work in the installed app, not a development build.')
+  else ed.warn(`Couldn't check for updates: ${r.error}`)
 }
 
 export function TitleBar(): React.JSX.Element {

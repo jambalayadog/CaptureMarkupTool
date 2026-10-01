@@ -6,6 +6,7 @@ import { CaptureManager } from './capture'
 import { explainWriteError } from './fsutil'
 import { Library } from './library'
 import { captureFolder, defaultCaptureFolder, loadSettings, saveSettings } from './settings'
+import { Updater } from './updater'
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
 
 const ICON = join(__dirname, '../../resources/icon.png')
@@ -34,6 +35,7 @@ let settings: Settings
 let capture: CaptureManager
 let captureSeq = 0
 let library: Library
+let updater: Updater
 /** Started by Windows at sign-in: stay in the tray until asked for. */
 const startHidden = process.argv.includes('--hidden')
 /** Messages for the editor page that arrived before it finished loading. */
@@ -138,9 +140,15 @@ function showEditor(): void {
 }
 
 /** Show a message in the editor (queued until it's ready). */
+/** Send a message to the editor page without bringing the window up (queued until it's ready). */
+function post(channel: string, payload: unknown): void {
+  if (editor && editorReady) editor.webContents.send(channel, payload)
+  else outbox.push([channel, payload])
+}
+
+/** Show a message in the editor. */
 function notify(text: string): void {
-  if (editor && editorReady) editor.webContents.send('editor:notify', text)
-  else outbox.push(['editor:notify', text])
+  post('editor:notify', text)
 }
 
 function sendToEditor(channel: string, payload: unknown): void {
@@ -168,6 +176,16 @@ function requestQuit(): void {
   }
   quitting = true
   app.quit()
+}
+
+/** Restart into a downloaded update (asking first if there's unsaved work). */
+function installUpdate(): void {
+  if (dirty) {
+    showEditor()
+    if (!confirmDiscard()) return
+  }
+  quitting = true
+  updater.install()
 }
 
 function captureName(): string {
@@ -234,6 +252,7 @@ function updateTrayMenu(): void {
       { label: `New capture${hotkey}`, click: () => void capture.start(false) },
       { label: 'Open editor', click: showEditor },
       { type: 'separator' },
+      ...(updater?.ready ? [{ label: `Restart to update to ${updater.ready}`, click: installUpdate }] : []),
       { label: `Quit ${APP_NAME}`, click: requestQuit }
     ])
   )
@@ -329,6 +348,8 @@ function registerIpc(): void {
   ipcMain.on('app:quit', requestQuit)
   // a fixed address: the page can't ask the app to open arbitrary links
   ipcMain.on('app:openProjectPage', () => void shell.openExternal(PROJECT_URL))
+  ipcMain.handle('update:check', () => updater.check())
+  ipcMain.on('update:install', installUpdate)
 
   // ---- capture library ----
   ipcMain.handle('library:list', async () => ({
@@ -449,6 +470,10 @@ if (!app.requestSingleInstanceLock()) {
       },
       () => editor?.webContents.send('library:changed')
     )
+    updater = new Updater((version) => {
+      updateTrayMenu()
+      post('update:ready', version)
+    })
     registerIpc()
     tray = new Tray(trayIcon())
     tray.on('click', showEditor)
@@ -458,6 +483,7 @@ if (!app.requestSingleInstanceLock()) {
     createEditor(!startHidden)
     handleArgv(process.argv)
     capture.prewarm()
+    updater.start()
   })
 
   app.on('before-quit', () => {

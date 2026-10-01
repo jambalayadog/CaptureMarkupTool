@@ -19,10 +19,110 @@
         width: 100vw;
         height: 100vh;
       }
+      /* Controls for adjusting a dragged region with the mouse */
+      .tb {
+        position: fixed;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 14px;
+        max-width: calc(100vw - 16px);
+        box-sizing: border-box;
+        padding: 7px 10px;
+        background: rgba(20, 22, 28, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+        color: #e8e9ec;
+        font: 500 12px 'Segoe UI', system-ui, sans-serif;
+        cursor: default;
+      }
+      .tb[hidden] {
+        display: none;
+      }
+      .tb .grp {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .tb .lbl {
+        margin-right: 4px;
+        color: #9aa0aa;
+      }
+      .tb .ax {
+        margin: 0 2px 0 6px;
+        color: #9aa0aa;
+      }
+      .tb input {
+        width: 46px;
+        height: 22px;
+        box-sizing: border-box;
+        padding: 0 4px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 5px;
+        background: #0f1115;
+        color: #fff;
+        font: inherit;
+        text-align: center;
+        user-select: text;
+      }
+      .tb input::-webkit-inner-spin-button {
+        display: none;
+      }
+      .tb input:focus {
+        outline: none;
+        border-color: #ff5e4d;
+      }
+      .tb button {
+        height: 22px;
+        min-width: 22px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #e8e9ec;
+        font: inherit;
+        cursor: pointer;
+      }
+      .tb button:hover {
+        background: rgba(255, 255, 255, 0.16);
+      }
+      .tb .size {
+        min-width: 80px;
+        color: #fff;
+        font-weight: 600;
+        text-align: center;
+      }
+      .tb .ok {
+        padding: 0 12px;
+        background: #ff5e4d;
+        color: #fff;
+        font-weight: 600;
+      }
+      .tb .ok:hover {
+        background: #ff7466;
+      }
     </style>
   </head>
   <body>
     <canvas id="c"></canvas>
+    <div id="tb" class="tb" hidden>
+      <div class="grp" title="Top-left pixel of the region">
+        <span class="lbl">Top-left</span>
+        <span class="ax">x</span><button data-f="x1" data-d="-1">−</button><input data-f="x1" type="number" /><button data-f="x1" data-d="1">+</button>
+        <span class="ax">y</span><button data-f="y1" data-d="-1">−</button><input data-f="y1" type="number" /><button data-f="y1" data-d="1">+</button>
+      </div>
+      <div class="grp" title="Bottom-right pixel of the region">
+        <span class="lbl">Bottom-right</span>
+        <span class="ax">x</span><button data-f="x2" data-d="-1">−</button><input data-f="x2" type="number" /><button data-f="x2" data-d="1">+</button>
+        <span class="ax">y</span><button data-f="y2" data-d="-1">−</button><input data-f="y2" type="number" /><button data-f="y2" data-d="1">+</button>
+      </div>
+      <span id="tb-size" class="size"></span>
+      <div class="grp">
+        <button id="tb-ok" class="ok" title="Capture (Enter)">Capture</button>
+        <button id="tb-cancel" title="Cancel (Esc)">Cancel</button>
+      </div>
+    </div>
     <script type="module" src="./capture/overlay.ts"></script>
   </body>
 </html>

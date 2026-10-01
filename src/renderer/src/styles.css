@@ -1088,6 +1088,11 @@ canvas.view {
   color: var(--text3);
 }
 
+.toast-action {
+  flex: none;
+  margin-left: 4px;
+}
+
 .about {
   display: flex;
   flex-direction: column;

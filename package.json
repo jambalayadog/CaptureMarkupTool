@@ -1,10 +1,11 @@
 {
   "name": "capture-markup-tool",
   "productName": "Capture Markup Tool",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Capture Markup Tool: a layered screenshot and image markup editor (annotations, pixel art, photo basics).",
   "main": "./out/main/index.js",
   "author": "jw",
+  "repository": "github:jambalayadog/CaptureMarkupTool",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -13,7 +14,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "electron-vite build && electron-builder --win",
+    "dist": "electron-vite build && electron-builder --win --publish never",
+    "release": "node scripts/release.mjs",
     "postinstall": "node node_modules/electron/install.js"
   },
   "build": {
@@ -40,6 +42,16 @@
       ],
       "icon": "resources/icon.ico"
     },
+    "nsis": {
+      "artifactName": "CaptureMarkupTool-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jambalayadog",
+        "repo": "CaptureMarkupTool"
+      }
+    ],
     "fileAssociations": [
       {
         "ext": "imk",
@@ -49,6 +61,7 @@
     ]
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "koffi": "^3.3.2"
   },
   "devDependencies": {

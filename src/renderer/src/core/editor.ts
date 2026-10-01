@@ -58,6 +58,12 @@ import {
   union
 } from './util'
 
+/** A button on a toast, e.g. "Restart now". */
+export interface ToastAction {
+  label: string
+  run: () => void
+}
+
 export type DialogKind = 'new' | 'resize' | 'canvasSize' | 'adjust' | 'settings' | 'shortcuts' | 'about'
 
 interface TextEditState {
@@ -126,7 +132,7 @@ export class Editor {
   /** The mouse wheel zooms (a setting); otherwise it scrolls and Ctrl+wheel zooms. */
   wheelZooms = true
   dialog: DialogKind | null = null
-  toast: { id: number; text: string; sticky: boolean } | null = null
+  toast: { id: number; text: string; sticky: boolean; action?: ToastAction } | null = null
   textEdit: TextEditState | null = null
   textArea: HTMLTextAreaElement | null = null
   version = 0
@@ -193,9 +199,9 @@ export class Editor {
    * `ms`; pass `'sticky'` for anything the user needs time to read (warnings,
    * errors) so it stays until they close it.
    */
-  notify(text: string, ms: number | 'sticky' = 2400): void {
+  notify(text: string, ms: number | 'sticky' = 2400, action?: ToastAction): void {
     const sticky = ms === 'sticky'
-    this.toast = { id: Date.now(), text, sticky }
+    this.toast = { id: Date.now(), text, sticky, action }
     clearTimeout(this.toastTimer)
     if (!sticky) this.toastTimer = window.setTimeout(() => this.dismissToast(), ms)
     this.emit()

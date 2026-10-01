@@ -91,6 +91,11 @@ export interface EditorApi {
   openLibraryFolder(): void
   /** Open the project's GitHub page in the default browser. */
   openProjectPage(): void
+  // updates (installed app only)
+  checkForUpdates(): Promise<UpdateStatus>
+  installUpdate(): void
+  /** A new version finished downloading and installs on restart. */
+  onUpdateReady(cb: (version: string) => void): () => void
   /** Test the chosen library folder again (after allowing the app in Windows Security). */
   retryLibraryFolder(): Promise<{ ok: boolean; folder: string }>
   onLibraryChanged(cb: () => void): () => void
@@ -105,6 +110,13 @@ export interface CaptureWindowRect {
   h: number
   title: string
 }
+
+export type UpdateStatus =
+  | { state: 'dev'; current: string }
+  | { state: 'latest'; current: string }
+  | { state: 'downloading'; current: string; version: string }
+  | { state: 'ready'; current: string; version: string }
+  | { state: 'error'; current: string; error: string }
 
 export interface CaptureShowPayload {
   /** Raw BGRA pixels of the frozen display. */
