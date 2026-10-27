@@ -288,8 +288,11 @@ body.electron .titlebar {
 }
 
 .opt-hint {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text3);
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .opt-value {
@@ -1283,6 +1286,87 @@ button.status-item {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.5);
+}
+
+/* docked beside the canvas, leaving it visible (live previews) */
+.modal-back.docked {
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 92px 290px 0 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.modal-back.docked .modal {
+  width: 340px;
+  pointer-events: auto;
+}
+
+.fx-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fx-head {
+  font-weight: 600;
+}
+
+.fx-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 22px;
+}
+
+.fx-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text2);
+}
+
+/* line the sliders up */
+.fx-body .num-label,
+.fx-color span {
+  width: 52px;
+  flex: none;
+}
+
+.fx-body .num {
+  display: flex;
+}
+
+.fx-body .num input[type='range'] {
+  flex: 1;
+}
+
+.fx-color input {
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.layer-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.fx-badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(91, 140, 255, 0.18);
+  color: var(--text2);
+  font-style: italic;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .modal {

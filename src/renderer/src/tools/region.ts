@@ -1,5 +1,5 @@
 import { cropTo } from '../core/imageOps'
-import { dragRectHandle, rectHandles, HANDLE_CURSORS, type HandleId } from '../core/objects'
+import { dragRectHandle, handleCursor, rectHandles, type HandleId } from '../core/objects'
 import type { Rect, Vec } from '../core/types'
 import { contains, normRect } from '../core/util'
 import type { Editor } from '../core/editor'
@@ -52,7 +52,7 @@ export const cropTool: Tool = {
   cursor(ed, p) {
     if (!p || !ed.d) return 'crosshair'
     const h = cropHandleAt(ed, p.screen)
-    if (h) return HANDLE_CURSORS[h]
+    if (h) return handleCursor(h)
     return contains(cropRect(ed), p.doc) ? 'move' : 'crosshair'
   },
   activate(ed) {

@@ -1,5 +1,5 @@
 import { restore, type Snapshot } from '../core/doc'
-import { moveObject, textLayout } from '../core/objects'
+import { moveObject, tailsOf, textLayout } from '../core/objects'
 import type { Rect, StepObj, TextObj, Vec } from '../core/types'
 import { contrastText, normRect, uid } from '../core/util'
 import { HandleDrag } from './common'
@@ -53,7 +53,7 @@ export const textTool: Tool = {
       bold: o.bold,
       color: ed.primary,
       bg: o.textBg ? ed.secondary : null,
-      tail: null,
+      tails: [],
       shadow: o.shadow,
       boxW: null,
       boxH: null,
@@ -98,7 +98,7 @@ export const calloutTool: Tool = {
   down(ed, p) {
     if (calloutHandles.tryStart(ed, p)) return
     const hit = ed.hitTest(p.doc)
-    if (hit?.obj.type === 'text' && hit.obj.tail) {
+    if (hit?.obj.type === 'text' && tailsOf(hit.obj).length) {
       ed.startTextEdit(hit.obj.id, ed.snapshot(), false)
       return
     }
@@ -116,7 +116,7 @@ export const calloutTool: Tool = {
       bold: o.bold,
       color: contrastText(ed.primary),
       bg: ed.primary,
-      tail: { x: p.doc.x, y: p.doc.y },
+      tails: [{ x: p.doc.x, y: p.doc.y, ax: 0.5, ay: 0.5 }],
       shadow: o.shadow,
       boxW: null,
       boxH: null,

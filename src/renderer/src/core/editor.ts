@@ -21,7 +21,8 @@ import { canvasToBlob, decodeImage, decodeProject, encodeDoc, isProjectBytes } f
 import {
   fontOf,
   handlesOf,
-  HANDLE_CURSORS,
+  handleCursor,
+  tailsOf,
   hitObject,
   objBounds,
   offsetObject,
@@ -64,7 +65,7 @@ export interface ToastAction {
   run: () => void
 }
 
-export type DialogKind = 'new' | 'resize' | 'canvasSize' | 'adjust' | 'settings' | 'shortcuts' | 'about'
+export type DialogKind = 'new' | 'resize' | 'canvasSize' | 'adjust' | 'settings' | 'shortcuts' | 'about' | 'effects'
 
 interface TextEditState {
   id: string
@@ -344,6 +345,7 @@ export class Editor {
     if (!d) return
     // Any other edit invalidates an unapplied free transform (it previews stale pixels).
     d.live.transform = null
+    d.rev++
     const h = d.history
     const last = h.entries[h.index - 1]
     const now = performance.now()
@@ -384,6 +386,7 @@ export class Editor {
 
   private afterHistoryJump(): void {
     const d = this.d!
+    d.rev++
     if (d.selection) d.selection = clipSel(d.selection, d.width, d.height)
     this.updateAnts()
     this.changed()
@@ -499,7 +502,7 @@ export class Editor {
   }
 
   /** Change layer properties. Pass `live` while dragging a slider; commit on release. */
-  setLayerProps(id: string, patch: Partial<Pick<Layer, 'name' | 'visible' | 'opacity' | 'blend' | 'locked'>>, mergeKey?: string): void {
+  setLayerProps(id: string, patch: Partial<Pick<Layer, 'name' | 'visible' | 'opacity' | 'blend' | 'locked' | 'effects'>>, mergeKey?: string): void {
     const l = this.layer(id)
     if (!l) return
     const before = this.snapshot()
@@ -587,7 +590,7 @@ export class Editor {
     if (!d || d.selectedIds.length !== 1) return null
     const f = this.findObject(d.selectedIds[0])
     if (!f) return null
-    for (const h of handlesOf(f.obj)) {
+    for (const h of handlesOf(f.obj, d.view.zoom)) {
       const s = this.toScreen(h)
       if (Math.abs(s.x - screen.x) <= 7 && Math.abs(s.y - screen.y) <= 7) return { obj: f.obj, handle: h }
     }
@@ -596,7 +599,7 @@ export class Editor {
 
   handleCursor(screen: Vec): string | null {
     const h = this.hitHandle(screen)
-    return h ? HANDLE_CURSORS[h.handle.id] : null
+    return h ? handleCursor(h.handle.id) : null
   }
 
   /** Topmost opaque pixel of a movable raster layer (never the bottom layer). */
@@ -982,7 +985,7 @@ export class Editor {
     if (applyToSelection && this.d?.selectedIds.length && !this.textEdit) {
       this.updateSelected(
         (o) => {
-          if (o.type === 'text' && o.tail && o.bg) {
+          if (o.type === 'text' && tailsOf(o).length && o.bg) {
             o.bg = c
             o.color = contrastText(c)
           } else setObjectColor(o, c)
@@ -1601,14 +1604,35 @@ export class Editor {
       } else this.outlineObject(ctx, o, ACCENT, true)
     }
     if (showHandles && sel.length === 1 && !this.textEdit) {
-      for (const hd of handlesOf(sel[0])) {
+      // drawn bottom-up so the topmost handle (the one a click picks) is on top
+      for (const hd of [...handlesOf(sel[0], d.view.zoom)].reverse()) {
         const s = this.toScreen(hd)
         ctx.fillStyle = '#fff'
         ctx.strokeStyle = ACCENT
         ctx.lineWidth = 1.5
         ctx.beginPath()
-        if (hd.id === 'p1' || hd.id === 'p2' || hd.id === 'tail') ctx.arc(s.x, s.y, 5, 0, Math.PI * 2)
-        else ctx.rect(Math.round(s.x) - 4, Math.round(s.y) - 4, 8, 8)
+        if (hd.id === 'add-tail') {
+          ctx.fillStyle = ACCENT
+          ctx.arc(s.x, s.y, 7, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = '#fff'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(s.x - 3.5, s.y)
+          ctx.lineTo(s.x + 3.5, s.y)
+          ctx.moveTo(s.x, s.y - 3.5)
+          ctx.lineTo(s.x, s.y + 3.5)
+          ctx.stroke()
+          continue
+        }
+        if (hd.id === 'p1' || hd.id === 'p2' || hd.id.startsWith('tail-')) ctx.arc(s.x, s.y, 5, 0, Math.PI * 2)
+        else if (hd.id.startsWith('base-')) {
+          ctx.moveTo(s.x, s.y - 5)
+          ctx.lineTo(s.x + 5, s.y)
+          ctx.lineTo(s.x, s.y + 5)
+          ctx.lineTo(s.x - 5, s.y)
+          ctx.closePath()
+        } else ctx.rect(Math.round(s.x) - 4, Math.round(s.y) - 4, 8, 8)
         ctx.fill()
         ctx.stroke()
       }
@@ -1700,7 +1724,7 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
         shadow: o.shadow,
         textAlign: o.align ?? 'left',
         textVAlign: o.valign ?? 'top',
-        ...(o.tail ? {} : { textBg: !!o.bg })
+        ...(tailsOf(o).length ? {} : { textBg: !!o.bg })
       }
     case 'step':
       return { stepSize: o.size, shadow: o.shadow }
@@ -1739,7 +1763,7 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       if (k === 'fontFamily') return set(o, { fontFamily: v as string })
       if (k === 'bold') return set(o, { bold: v as boolean })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
-      if (k === 'textBg' && !o.tail) return set(o, { bg: v ? ed.secondary : null })
+      if (k === 'textBg' && !tailsOf(o).length) return set(o, { bg: v ? ed.secondary : null })
       if (k === 'textAlign') return set(o, { align: v as TextObj['align'] })
       if (k === 'textVAlign') return set(o, { valign: v as TextObj['valign'] })
       return false

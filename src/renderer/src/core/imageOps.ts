@@ -2,7 +2,8 @@ import type { DocState } from './doc'
 import { layerBounds, rasterLayer } from './doc'
 import type { Editor } from './editor'
 import { drawObject, offsetObject, transformObject } from './objects'
-import { filteredLayer, flattenDoc, renderDoc } from './render'
+import { hasEffects } from './effects'
+import { bakeLayer, filteredLayer, flattenDoc, renderDoc } from './render'
 import type { Layer, RasterLayer, Rect, Vec, VectorLayer } from './types'
 import { ctx2d, intersect, makeCanvas, normalize, pixelRect, scratch, union } from './util'
 
@@ -237,7 +238,7 @@ function layerContent(d: DocState, index: number): { canvas: HTMLCanvasElement; 
 }
 
 function withProps(target: RasterLayer, src: Layer): RasterLayer {
-  return Object.assign(target, { id: src.id, name: src.name, visible: src.visible, opacity: src.opacity, blend: src.blend })
+  return Object.assign(target, { id: src.id, name: src.name, visible: src.visible, opacity: src.opacity, blend: src.blend, effects: src.effects })
 }
 
 export function rasterizeLayer(ed: Editor, id: string): void {
@@ -257,15 +258,17 @@ export function mergeDown(ed: Editor, id: string): void {
   const top = d.layers[i]
   const below = d.layers[i - 1]
   const before = ed.snapshot()
-  if (top.kind === 'vector' && below.kind === 'vector' && top.opacity >= 1 && top.blend === 'source-over') {
+  const fx = hasEffects(top.effects) || hasEffects(below.effects)
+  if (!fx && top.kind === 'vector' && below.kind === 'vector' && top.opacity >= 1 && top.blend === 'source-over') {
     below.objects.push(...top.objects)
     d.layers.splice(i, 1)
     d.activeLayerId = below.id
     ed.commit('Merge down', before)
     return
   }
-  const lo = layerContent(d, i - 1)
-  const hi = layerContent(d, i)
+  // effects get baked into the merged pixels
+  const lo = hasEffects(below.effects) ? { canvas: bakeLayer(d, below), x: 0, y: 0 } : layerContent(d, i - 1)
+  const hi = hasEffects(top.effects) ? { canvas: bakeLayer(d, top), x: 0, y: 0 } : layerContent(d, i)
   const bounds = union({ x: lo.x, y: lo.y, w: lo.canvas.width, h: lo.canvas.height }, { x: hi.x, y: hi.y, w: hi.canvas.width, h: hi.canvas.height })
   const c = makeCanvas(bounds.w, bounds.h)
   const x = ctx2d(c)
@@ -274,6 +277,7 @@ export function mergeDown(ed: Editor, id: string): void {
   x.globalCompositeOperation = top.blend
   if (top.visible) x.drawImage(hi.canvas, hi.x - bounds.x, hi.y - bounds.y)
   const merged = withProps(rasterLayer('', c, bounds.x, bounds.y), below)
+  merged.effects = undefined
   d.layers.splice(i - 1, 2, merged)
   d.activeLayerId = merged.id
   d.selectedIds = []

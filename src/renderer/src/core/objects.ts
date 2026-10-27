@@ -1,5 +1,5 @@
-import type { LineObj, PathObj, Rect, RedactObj, ShapeObj, StepObj, TextObj, VObj, Vec } from './types'
-import { contrastText, ctx2d, distToSegment, normRect, pixelRect, scratch, snap45 } from './util'
+import type { LineObj, PathObj, Rect, RedactObj, ShapeObj, StepObj, Tail, TextObj, VObj, Vec } from './types'
+import { clamp, contrastText, ctx2d, distToSegment, normRect, pixelRect, scratch, snap45 } from './util'
 
 // ---- text layout -------------------------------------------------------------
 
@@ -216,21 +216,55 @@ function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj): void {
   }
 }
 
+/** A text object's callout pointers (older projects had a single `tail`). */
+export const tailsOf = (o: TextObj): Tail[] => o.tails ?? []
+
+const bubbleRadius = (o: TextObj, L: TextLayout): number => Math.min(o.fontSize * 0.3, L.w / 2, L.h / 2)
+
+/** The point inside the box a pointer comes from. */
+function anchorOf(o: TextObj, L: TextLayout, t: Tail): Vec {
+  return { x: o.x + (t.ax ?? 0.5) * L.w, y: o.y + (t.ay ?? 0.5) * L.h }
+}
+
+const tipInside = (o: TextObj, L: TextLayout, t: Tail): boolean => t.x > o.x && t.x < o.x + L.w && t.y > o.y && t.y < o.y + L.h
+
+/**
+ * Where a pointer leaves the box (on the line from its anchor to its tip) and the
+ * triangle it draws, with its base along that side of the box. Null when the tip is
+ * inside the box.
+ */
+function tailShape(o: TextObj, L: TextLayout, t: Tail): { base: Vec; poly: Vec[] } | null {
+  if (tipInside(o, L, t)) return null
+  const a = anchorOf(o, L, t)
+  const dx = t.x - a.x
+  const dy = t.y - a.y
+  const sx = dx > 0 ? (o.x + L.w - a.x) / dx : dx < 0 ? (o.x - a.x) / dx : Infinity
+  const sy = dy > 0 ? (o.y + L.h - a.y) / dy : dy < 0 ? (o.y - a.y) / dy : Infinity
+  const s = Math.max(0, Math.min(sx, sy))
+  const base = { x: a.x + dx * s, y: a.y + dy * s }
+  const r = bubbleRadius(o, L)
+  const half = clamp(Math.min(L.w, L.h) * 0.2, 4, o.fontSize * 0.7)
+  // keep the base on the straight part of that side; nudge it 1px in so it joins without a seam
+  if (sx < sy) {
+    const lo = o.y + r + half
+    const hi = o.y + L.h - r - half
+    const y = lo <= hi ? clamp(base.y, lo, hi) : o.y + L.h / 2
+    const x = base.x + (dx > 0 ? -1 : 1)
+    return { base: { x: base.x, y }, poly: [{ x, y: y - half }, { x: t.x, y: t.y }, { x, y: y + half }] }
+  }
+  const lo = o.x + r + half
+  const hi = o.x + L.w - r - half
+  const x = lo <= hi ? clamp(base.x, lo, hi) : o.x + L.w / 2
+  const y = base.y + (dy > 0 ? -1 : 1)
+  return { base: { x, y: base.y }, poly: [{ x: x - half, y }, { x: t.x, y: t.y }, { x: x + half, y }] }
+}
+
 function bubblePath(o: TextObj, L: TextLayout): Path2D {
   const p = new Path2D()
-  const r = Math.min(o.fontSize * 0.3, L.w / 2, L.h / 2)
-  p.roundRect(o.x, o.y, L.w, L.h, r)
-  if (o.tail) {
-    const c = { x: o.x + L.w / 2, y: o.y + L.h / 2 }
-    const dx = o.tail.x - c.x
-    const dy = o.tail.y - c.y
-    const len = Math.hypot(dx, dy)
-    const inside = o.tail.x > o.x && o.tail.x < o.x + L.w && o.tail.y > o.y && o.tail.y < o.y + L.h
-    if (len > 1 && !inside) {
-      const bw = Math.min(L.w, L.h) * 0.28
-      const n = { x: -dy / len, y: dx / len }
-      addPoly(p, [{ x: c.x + n.x * bw, y: c.y + n.y * bw }, o.tail, { x: c.x - n.x * bw, y: c.y - n.y * bw }])
-    }
+  p.roundRect(o.x, o.y, L.w, L.h, bubbleRadius(o, L))
+  for (const t of tailsOf(o)) {
+    const shape = tailShape(o, L, t)
+    if (shape) addPoly(p, shape.poly)
   }
   return p
 }
@@ -421,9 +455,9 @@ export function hitObject(o: VObj, p: Vec, tol: number): boolean {
     case 'text': {
       const r = objBounds(o)
       if (p.x >= r.x - tol && p.x <= r.x + r.w + tol && p.y >= r.y - tol && p.y <= r.y + r.h + tol) return true
-      if (o.type === 'text' && o.tail && o.bg) {
-        const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
-        return distToSegment(p, c, o.tail) <= tol + 4
+      if (o.type === 'text' && o.bg) {
+        const L = textLayout(o)
+        return tailsOf(o).some((t) => distToSegment(p, anchorOf(o, L, t), t) <= tol + 4)
       }
       return false
     }
@@ -444,7 +478,9 @@ export function hitObject(o: VObj, p: Vec, tol: number): boolean {
   }
 }
 
-export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'p1' | 'p2' | 'tail'
+export type RectHandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+/** Callout pointers: `tail-N` is a tip, `base-N` slides where it leaves the box, `add-tail` makes a new one. */
+export type HandleId = RectHandleId | 'p1' | 'p2' | `tail-${number}` | `base-${number}` | 'add-tail'
 
 export interface Handle {
   id: HandleId
@@ -466,7 +502,8 @@ export function rectHandles(r: Rect): Handle[] {
   ]
 }
 
-export function handlesOf(o: VObj): Handle[] {
+/** Handles of `o`, topmost first. `zoom` keeps the "add pointer" knob a fixed distance away on screen. */
+export function handlesOf(o: VObj, zoom = 1): Handle[] {
   switch (o.type) {
     case 'rect':
     case 'ellipse':
@@ -478,16 +515,25 @@ export function handlesOf(o: VObj): Handle[] {
         { id: 'p2', x: o.x2, y: o.y2 }
       ]
     case 'text': {
-      // the box resizes (text wraps to it); a callout's pointer has its own handle
+      // the box resizes (text wraps to it); a bubble also has its pointers and a knob for adding one
       const box = rectHandles(objBounds(o))
-      return o.tail && o.bg ? [...box, { id: 'tail', x: o.tail.x, y: o.tail.y }] : box
+      if (!o.bg) return box
+      const L = textLayout(o)
+      const pointers: Handle[] = []
+      tailsOf(o).forEach((t, i) => {
+        const shape = tailShape(o, L, t)
+        pointers.push({ id: `tail-${i}`, x: t.x, y: t.y })
+        if (shape) pointers.push({ id: `base-${i}`, ...shape.base })
+      })
+      const gap = 18 / zoom
+      return [...pointers, ...box, { id: 'add-tail', x: o.x + L.w + gap, y: o.y - gap }]
     }
     default:
       return []
   }
 }
 
-export const HANDLE_CURSORS: Record<HandleId, string> = {
+const RESIZE_CURSORS: Record<RectHandleId, string> = {
   nw: 'nwse-resize',
   se: 'nwse-resize',
   ne: 'nesw-resize',
@@ -495,11 +541,16 @@ export const HANDLE_CURSORS: Record<HandleId, string> = {
   n: 'ns-resize',
   s: 'ns-resize',
   e: 'ew-resize',
-  w: 'ew-resize',
-  p1: 'crosshair',
-  p2: 'crosshair',
-  tail: 'crosshair'
+  w: 'ew-resize'
 }
+
+export function handleCursor(id: HandleId): string {
+  if (id === 'add-tail') return 'copy'
+  if (id.startsWith('base-')) return 'move'
+  return RESIZE_CURSORS[id as RectHandleId] ?? 'crosshair'
+}
+
+const handleIndex = (id: string): number => Number(id.slice(id.indexOf('-') + 1))
 
 /** Resize a rectangle by dragging one of its 8 handles. */
 export function dragRectHandle(orig: Rect, id: HandleId, p: Vec, keepAspect: boolean): Rect {
@@ -528,8 +579,48 @@ export function dragRectHandle(orig: Rect, id: HandleId, p: Vec, keepAspect: boo
   return normRect({ x: l, y: t }, { x: r, y: b })
 }
 
-/** Apply a handle drag to `o`, starting from the untouched copy `orig`. */
-export function dragHandle(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boolean): void {
+/**
+ * Apply a handle drag to `o`, starting from the untouched copy `orig`. Returns the
+ * handle to keep dragging (dragging "add pointer" turns into dragging the new tip).
+ */
+export function dragHandle(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boolean): HandleId {
+  if (o.type === 'text' && (id === 'add-tail' || id.startsWith('tail-') || id.startsWith('base-'))) {
+    o.tails = [...tailsOf(o)]
+    if (id === 'add-tail') {
+      o.tails.push({ x: p.x, y: p.y, ax: 0.5, ay: 0.5 })
+      return `tail-${o.tails.length - 1}`
+    }
+    const i = handleIndex(id)
+    const t = o.tails[i]
+    if (!t) return id
+    if (id.startsWith('tail-')) o.tails[i] = { ...t, x: p.x, y: p.y }
+    else {
+      // the base follows the pointer, kept inside the box
+      const L = textLayout(o)
+      o.tails[i] = { ...t, ax: clamp((p.x - o.x) / L.w, 0, 1), ay: clamp((p.y - o.y) / L.h, 0, 1) }
+    }
+    return id
+  }
+  dragOther(o, orig, id, p, shift)
+  return id
+}
+
+/** A click on a handle without dragging it: the "add pointer" knob adds one below the bubble. */
+export function clickHandle(o: VObj, id: HandleId): boolean {
+  if (o.type !== 'text' || id !== 'add-tail') return false
+  const L = textLayout(o)
+  o.tails = [...tailsOf(o), { x: o.x + L.w + o.fontSize * 1.5, y: o.y + L.h + o.fontSize * 1.5, ax: 0.5, ay: 0.5 }]
+  return true
+}
+
+/** After a handle drag: a pointer dragged back inside its bubble is removed. */
+export function endHandleDrag(o: VObj): void {
+  if (o.type !== 'text' || !tailsOf(o).length) return
+  const L = textLayout(o)
+  o.tails = tailsOf(o).filter((t) => !tipInside(o, L, t))
+}
+
+function dragOther(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boolean): void {
   if ((o.type === 'rect' || o.type === 'ellipse' || o.type === 'redact') && orig.type === o.type) {
     const r = dragRectHandle(objBounds(orig), id, p, shift)
     Object.assign(o, r)
@@ -543,8 +634,6 @@ export function dragHandle(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boo
       o.x2 = q.x
       o.y2 = q.y
     }
-  } else if (o.type === 'text' && id === 'tail') {
-    o.tail = { x: p.x, y: p.y }
   } else if (o.type === 'text' && orig.type === 'text') {
     // Resizing a text box changes the box, not the font: width wraps the text, and
     // height can add room (it never shrinks past the text).
@@ -578,7 +667,7 @@ export function moveObject(o: VObj, orig: VObj, dx: number, dy: number): void {
       const src = orig as TextObj
       o.x = src.x + dx
       o.y = src.y + dy
-      if (src.tail) o.tail = { x: src.tail.x + dx, y: src.tail.y + dy }
+      o.tails = tailsOf(src).map((t) => ({ ...t, x: t.x + dx, y: t.y + dy }))
       break
     }
     case 'line': {
@@ -610,7 +699,7 @@ export function offsetObject(o: VObj, dx: number, dy: number): void {
     case 'text':
       o.x += dx
       o.y += dy
-      if (o.tail) o.tail = { x: o.tail.x + dx, y: o.tail.y + dy }
+      o.tails = tailsOf(o).map((t) => ({ ...t, x: t.x + dx, y: t.y + dy }))
       break
     case 'line':
       o.x1 += dx
@@ -651,6 +740,7 @@ export function transformObject(o: VObj, map: (p: Vec) => Vec, scale: number): v
     }
     case 'text': {
       const before = textLayout(o)
+      const anchors = tailsOf(o).map((t) => map(anchorOf(o, before, t)))
       const c = map({ x: o.x + before.w / 2, y: o.y + before.h / 2 })
       o.fontSize = Math.max(4, o.fontSize * scale)
       if (o.boxW != null) o.boxW *= scale
@@ -658,7 +748,11 @@ export function transformObject(o: VObj, map: (p: Vec) => Vec, scale: number): v
       const after = textLayout(o)
       o.x = c.x - after.w / 2
       o.y = c.y - after.h / 2
-      if (o.tail) o.tail = map(o.tail)
+      // pointer tips follow the transform; each base keeps its spot on the (unrotated) box
+      o.tails = tailsOf(o).map((t, i) => {
+        const tip = map(t)
+        return { x: tip.x, y: tip.y, ax: clamp((anchors[i].x - o.x) / after.w, 0, 1), ay: clamp((anchors[i].y - o.y) / after.h, 0, 1) }
+      })
       break
     }
     case 'step': {
@@ -718,7 +812,7 @@ export function describeObject(o: VObj): string {
     case 'ellipse':
       return 'Ellipse'
     case 'text': {
-      const kind = o.tail ? 'Callout' : 'Text'
+      const kind = tailsOf(o).length ? 'Callout' : 'Text'
       const first = o.text.trim().split('\n')[0]
       if (!first) return kind
       return `${kind} “${first.length > 24 ? `${first.slice(0, 23)}…` : first}”`

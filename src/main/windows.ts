@@ -85,6 +85,21 @@ const DWMWA_EXTENDED_FRAME_BOUNDS = 9
 const DWMWA_CLOAKED = 14
 const IGNORED_TITLES = new Set(['Program Manager', 'Windows Input Experience', 'Windows Shell Experience Host'])
 
+/** The window in front right now, as a handle buffer for forceForeground (null if unknown). */
+export function foregroundWindow(): Buffer | null {
+  const w = load()
+  if (!w) return null
+  try {
+    const fg = w.GetForegroundWindow()
+    if (!fg) return null
+    const b = Buffer.alloc(8)
+    b.writeBigUInt64LE(w.koffi.address(fg))
+    return b
+  } catch {
+    return null
+  }
+}
+
 /** sizeof(INPUT): a type field plus the largest member of its union, padded. */
 const INPUT_SIZE = process.arch === 'ia32' ? 28 : 40
 

@@ -3,6 +3,7 @@ import { basename, extname, isAbsolute, join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { CaptureManager } from './capture'
+import { flash } from './flash'
 import { explainWriteError } from './fsutil'
 import { Library } from './library'
 import { captureFolder, defaultCaptureFolder, loadSettings, saveSettings } from './settings'
@@ -434,17 +435,22 @@ if (!app.requestSingleInstanceLock()) {
       },
       restoreEditor: showEditor,
       adjustRegions: () => settings.captureAdjust,
-      onCaptured: async (png) => {
-        if (settings.copyOnCapture) void copyPngToClipboard(png)
+      onCaptured: async (png, { mode, at }) => {
+        const copy = mode === 'copy'
+        if (copy || settings.copyOnCapture) void copyPngToClipboard(png)
+        if (copy) flash('Copied', at)
         // Open the editor first; saving to the library happens in the background
-        // and must never be able to hold up editing.
+        // and must never be able to hold up editing. A copy still lands in the
+        // editor (as a new tab), just without bringing the window up.
         const id = ++captureSeq
         const name = captureName()
-        sendToEditor('editor:capture', { png: new Uint8Array(png), name, path: null, id })
+        const capture = { png: new Uint8Array(png), name, path: null, id }
+        if (copy) post('editor:capture', capture)
+        else sendToEditor('editor:capture', capture)
         if (!settings.autoSaveCaptures) return
         try {
           const saved = await library.save(png, name)
-          sendToEditor('editor:captureSaved', { id, path: saved.path })
+          post('editor:captureSaved', { id, path: saved.path })
           if (saved.blockedFolder) {
             notify(
               `Windows blocked saving captures to ${saved.blockedFolder} (Controlled folder access), so they're going to ${library.folder()}. ` +

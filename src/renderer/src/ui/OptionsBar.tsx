@@ -28,6 +28,7 @@ import {
 import { FONTS, HIGHLIGHT_COLORS } from '../core/constants'
 import type { Editor } from '../core/editor'
 import { cropToSelection } from '../core/imageOps'
+import { tailsOf } from '../core/objects'
 import type { Head, SelectMode, StepObj, TextAlign, TextVAlign, ToolOptions, VObj } from '../core/types'
 import { applyCrop, resetCrop } from '../tools/region'
 import { adjustTransform, finishTransform } from '../tools/transform'
@@ -52,7 +53,7 @@ function styleOf(o: VObj): string {
     case 'line':
       return o.start !== 'none' || o.end !== 'none' ? 'arrow' : 'line'
     case 'text':
-      return o.tail ? 'callout' : 'text'
+      return tailsOf(o).length ? 'callout' : 'text'
     case 'path':
       return 'highlight'
     default:
@@ -174,7 +175,7 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           {font}
           <TextBoxOptions ed={ed} />
           {shadow}
-          <span className="opt-hint">Bubble uses the primary colour</span>
+          <span className="opt-hint">Drag + for another pointer · drag a tip into the bubble to remove it</span>
         </>
       )
     case 'step': {

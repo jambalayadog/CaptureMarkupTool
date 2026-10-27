@@ -1,6 +1,12 @@
 import { BrowserWindow, desktopCapturer, ipcMain, screen, type Display, type NativeImage, type WebContents } from 'electron'
-import { forceForeground, listWindows, type NativeWindow } from './windows'
-import type { CaptureShowPayload, CaptureWindowRect } from '../shared/api'
+import { forceForeground, foregroundWindow, listWindows, type NativeWindow } from './windows'
+import type { CaptureMode, CaptureShowPayload, CaptureWindowRect } from '../shared/api'
+
+export interface CapturedInfo {
+  mode: CaptureMode
+  /** Where the capture was on screen, in screen coordinates (DIPs). */
+  at: { x: number; y: number; width: number; height: number }
+}
 
 interface Overlay {
   win: BrowserWindow
@@ -18,7 +24,7 @@ export interface CaptureHooks {
   /** Hide the editor if visible; resolves true if it was hidden. */
   hideEditor(): Promise<boolean>
   restoreEditor(): void
-  onCaptured(png: Buffer): void
+  onCaptured(png: Buffer, info: CapturedInfo): void
   /** Whether a dragged region is adjusted before capturing (a setting). */
   adjustRegions(): boolean
 }
@@ -41,12 +47,14 @@ export class CaptureManager {
   private active = false
   private session = 0
   private restoreOnCancel = false
+  /** The window that was in front when the capture started (a copy goes back to it). */
+  private previous: Buffer | null = null
   /** Dev-only: finish automatically with this rect on the primary display. */
   private autoFinish: { x: number; y: number; w: number; h: number } | null = null
 
   constructor(private hooks: CaptureHooks) {
     ipcMain.on('capture:ready', (e) => this.onReady(e.sender))
-    ipcMain.on('capture:finish', (e, rect) => this.finish(e.sender, rect))
+    ipcMain.on('capture:finish', (e, rect, mode) => this.finish(e.sender, rect, mode === 'copy' ? 'copy' : 'edit'))
     // An overlay was pressed: give it keyboard focus, and clear any region on the others.
     ipcMain.on('capture:claim', (e) => {
       for (const ov of this.overlays.values()) {
@@ -75,6 +83,7 @@ export class CaptureManager {
     const session = ++this.session
     this.active = true
     this.autoFinish = autoFinish
+    this.previous = foregroundWindow()
     try {
       this.restoreOnCancel = hideEditor ? await this.hooks.hideEditor() : false
       const displays = screen.getAllDisplays()
@@ -177,10 +186,11 @@ export class CaptureManager {
     ov.win.webContents.focus()
   }
 
-  private finish(sender: WebContents, rect: { x: number; y: number; w: number; h: number } | null): void {
+  private finish(sender: WebContents, rect: { x: number; y: number; w: number; h: number } | null, mode: CaptureMode = 'edit'): void {
     if (!this.active) return
     const ov = this.find(sender)
     let png: Buffer | null = null
+    let at: CapturedInfo['at'] = { x: 0, y: 0, width: 0, height: 0 }
     if (ov?.image && rect && rect.w >= 1 && rect.h >= 1) {
       const size = ov.image.getSize()
       const x = Math.max(0, Math.round(rect.x))
@@ -188,12 +198,20 @@ export class CaptureManager {
       const w = Math.min(size.width - x, Math.round(rect.w))
       const h = Math.min(size.height - y, Math.round(rect.h))
       if (w > 0 && h > 0) png = ov.image.crop({ x, y, width: w, height: h }).toPNG()
+      const b = ov.display.bounds
+      const sx = b.width / size.width
+      const sy = b.height / size.height
+      at = { x: b.x + x * sx, y: b.y + y * sy, width: w * sx, height: h * sy }
     }
     this.session++
     this.hideAll()
     this.active = false
-    if (png) this.hooks.onCaptured(png)
-    else if (this.restoreOnCancel) this.hooks.restoreEditor()
+    // A copy goes back to whatever you were doing (the editor, if you started there).
+    if (mode === 'copy' || !png) {
+      if (this.restoreOnCancel) this.hooks.restoreEditor()
+      else if (mode === 'copy' && this.previous) forceForeground(this.previous)
+    }
+    if (png) this.hooks.onCaptured(png, { mode, at })
   }
 
   private hideAll(): void {

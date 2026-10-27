@@ -1,6 +1,7 @@
-import { Copy, Eye, EyeOff, ImagePlus, Lock, LockOpen, Merge, Shapes, SquarePlus, Trash } from 'lucide-react'
+import { Copy, Eye, EyeOff, ImagePlus, Lock, LockOpen, Merge, Shapes, Sparkles, SquarePlus, Trash } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BLEND_MODES } from '../core/constants'
+import { hasEffects } from '../core/effects'
 import { mergeDown, rasterizeLayer } from '../core/imageOps'
 import { describeObject, objectColor } from '../core/objects'
 import { renderThumb } from '../core/render'
@@ -87,7 +88,22 @@ function Row({ layer, index }: { layer: Layer; index: number }): React.JSX.Eleme
             />
           ) : (
             <>
-              <span>{layer.name}</span>
+              <div className="layer-title">
+                <span>{layer.name}</span>
+                {hasEffects(layer.effects) && (
+                  <b
+                    className="fx-badge"
+                    title="Layer effects (double-click to edit)"
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      ed.setActiveLayer(layer.id)
+                      ed.showDialog('effects')
+                    }}
+                  >
+                    fx
+                  </b>
+                )}
+              </div>
               {layer.kind === 'vector' && (
                 <small title="Annotation layer: objects stay editable">
                   <Shapes size={11} /> {layer.objects.length}
@@ -154,6 +170,13 @@ function layerMenu(layer: Layer, index: number): MenuEntry[] {
     items.push('separator', { label: 'Rasterize layer', action: () => rasterizeLayer(ed, layer.id) })
   }
   items.push(
+    {
+      label: 'Layer effects…',
+      action: () => {
+        ed.setActiveLayer(layer.id)
+        ed.showDialog('effects')
+      }
+    },
     { label: 'Duplicate layer', hint: 'Ctrl+J', action: () => ed.duplicateLayer(layer.id) },
     { label: 'Merge down', hint: 'Ctrl+E', disabled: index < 1, action: () => mergeDown(ed, layer.id) },
     { label: 'Delete layer', disabled: d.layers.length < 2, action: () => ed.deleteLayer(layer.id) }
@@ -203,6 +226,9 @@ export function LayersPanel(): React.JSX.Element {
         </IconBtn>
         <IconBtn title="New annotation layer" onClick={() => ed.addVectorLayer()}>
           <SquarePlus size={15} />
+        </IconBtn>
+        <IconBtn title="Layer effects (shadow, glow, stroke)" onClick={() => ed.showDialog('effects')}>
+          <Sparkles size={15} />
         </IconBtn>
         <IconBtn title="Duplicate layer (Ctrl+J)" onClick={() => ed.duplicateLayer(d.activeLayerId)}>
           <Copy size={15} />

@@ -1,7 +1,7 @@
 // Full-screen capture overlay (one per display). Shows the frozen screen,
 // lets the user drag a region or click a window, and reports the rectangle
 // (in screenshot pixels) back to the main process.
-import type { CaptureApi, CaptureShowPayload, CaptureWindowRect } from '../../shared/api'
+import type { CaptureApi, CaptureMode, CaptureShowPayload, CaptureWindowRect } from '../../shared/api'
 
 declare global {
   interface Window {
@@ -273,7 +273,7 @@ function draw(): void {
   }
   const target = focus ?? mouse
   if (target) drawLoupe(target, s)
-  if (region) drawHint('Drag the edges, use the controls, or arrows (Shift: top-left) · Enter or double-click to capture · Esc to cancel', s)
+  if (region) drawHint('Drag the edges, use the controls, or arrows (Shift: top-left) · Enter to capture · Ctrl+C to copy · Esc to cancel', s)
   else if (!mouse) drawHint('Drag to capture a region · Click a window · Enter for full screen · Esc to cancel', s)
   updateToolbar()
 }
@@ -403,10 +403,10 @@ function toShot(e: MouseEvent): Pt {
   return { x: e.clientX * s, y: e.clientY * s }
 }
 
-function finish(rect: R | null): void {
+function finish(rect: R | null, mode: CaptureMode = 'edit'): void {
   if (!active) return
   active = false
-  window.captureApi.finish(rect)
+  window.captureApi.finish(rect, mode)
 }
 
 /** Esc / right-click always cancel, even if this page never got its screenshot. */
@@ -482,6 +482,11 @@ window.addEventListener('keydown', (e) => {
   if (!active) return
   if (e.key === 'Enter') return finish(region ?? { x: 0, y: 0, w: shot.width, h: shot.height })
   if (e.target instanceof HTMLInputElement) return
+  // Ctrl+C: the region (or the window under the cursor) straight to the clipboard
+  if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+    e.preventDefault()
+    return finish(currentRect() ?? { x: 0, y: 0, w: shot.width, h: shot.height }, 'copy')
+  }
   if (region && e.key.startsWith('Arrow')) {
     e.preventDefault()
     nudge(e.key, e.shiftKey, e.ctrlKey)
@@ -536,6 +541,7 @@ for (const btn of Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button
 }
 
 document.getElementById('tb-ok')!.addEventListener('click', () => region && finish(region))
+document.getElementById('tb-copy')!.addEventListener('click', () => region && finish(region, 'copy'))
 document.getElementById('tb-cancel')!.addEventListener('click', () => cancel())
 
 window.captureApi.onShow(show)

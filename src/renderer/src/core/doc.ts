@@ -89,6 +89,8 @@ export interface DocState {
   /** Cached composite of all layers at document resolution. */
   comp: HTMLCanvasElement
   compDirty: boolean
+  /** Bumped by every committed change, undo and redo (layer-effect caches key on it). */
+  rev: number
 }
 
 export function emptyLive(): LiveState {
@@ -114,7 +116,8 @@ export function createDoc(width: number, height: number, name: string, layers: L
     stepNext: null,
     live: emptyLive(),
     comp: makeCanvas(width, height),
-    compDirty: true
+    compDirty: true,
+    rev: 0
   }
 }
 

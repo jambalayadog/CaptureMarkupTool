@@ -1,7 +1,8 @@
 import type { DocState } from './doc'
 import { rasterLayer, vectorLayer } from './doc'
+import type { LayerEffects } from './effects'
 import { flattenDoc } from './render'
-import type { FileKind, Layer } from './types'
+import type { FileKind, Layer, Vec, VObj } from './types'
 import { ctx2d, makeCanvas } from './util'
 
 export async function decodeImage(src: Uint8Array | Blob): Promise<HTMLCanvasElement> {
@@ -35,8 +36,8 @@ interface ProjectFile {
   height: number
   active: number
   layers: Array<
-    | { kind: 'raster'; name: string; visible: boolean; opacity: number; blend: string; locked: boolean; x: number; y: number; png: string }
-    | { kind: 'vector'; name: string; visible: boolean; opacity: number; blend: string; locked: boolean; objects: unknown[] }
+    | { kind: 'raster'; name: string; visible: boolean; opacity: number; blend: string; locked: boolean; effects?: LayerEffects; x: number; y: number; png: string }
+    | { kind: 'vector'; name: string; visible: boolean; opacity: number; blend: string; locked: boolean; effects?: LayerEffects; objects: unknown[] }
   >
 }
 
@@ -48,7 +49,7 @@ export function encodeProject(d: DocState): Uint8Array {
     height: d.height,
     active: d.layers.findIndex((l) => l.id === d.activeLayerId),
     layers: d.layers.map((l) => {
-      const base = { name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, locked: l.locked }
+      const base = { name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, locked: l.locked, effects: l.effects }
       return l.kind === 'raster'
         ? { kind: 'raster' as const, ...base, x: l.x, y: l.y, png: l.canvas.toDataURL('image/png') }
         : { kind: 'vector' as const, ...base, objects: l.objects }
@@ -73,15 +74,25 @@ export async function decodeProject(bytes: Uint8Array): Promise<DecodedProject> 
     if (l.kind === 'raster') {
       const blob = await (await fetch(l.png)).blob()
       const layer = rasterLayer(l.name, await decodeImage(blob), l.x, l.y)
-      Object.assign(layer, { visible: l.visible, opacity: l.opacity, blend, locked: l.locked })
+      Object.assign(layer, { visible: l.visible, opacity: l.opacity, blend, locked: l.locked, effects: l.effects })
       layers.push(layer)
     } else {
       const layer = vectorLayer(l.name)
-      Object.assign(layer, { visible: l.visible, opacity: l.opacity, blend, locked: l.locked, objects: l.objects })
+      Object.assign(layer, { visible: l.visible, opacity: l.opacity, blend, locked: l.locked, effects: l.effects, objects: l.objects.map(upgradeObject) })
       layers.push(layer)
     }
   }
   return { width: file.width, height: file.height, layers, activeIndex: file.active }
+}
+
+/** Objects saved by older versions: a callout's single `tail` is now a list of pointers. */
+function upgradeObject(raw: unknown): VObj {
+  const o = raw as VObj & { tail?: Vec | null }
+  if (o.type === 'text' && !Array.isArray(o.tails)) {
+    o.tails = o.tail ? [{ x: o.tail.x, y: o.tail.y, ax: 0.5, ay: 0.5 }] : []
+    delete o.tail
+  }
+  return o
 }
 
 export const isProjectBytes = (bytes: Uint8Array): boolean => bytes[0] === 0x7b // '{'

@@ -118,6 +118,8 @@ export type UpdateStatus =
   | { state: 'ready'; current: string; version: string }
   | { state: 'error'; current: string; error: string }
 
+export type CaptureMode = 'edit' | 'copy'
+
 export interface CaptureShowPayload {
   /** Raw BGRA pixels of the frozen display. */
   bitmap: Uint8Array
@@ -134,7 +136,8 @@ export interface CaptureApi {
   onShow(cb: (p: CaptureShowPayload) => void): void
   onHide(cb: () => void): void
   ready(): void
-  finish(rect: { x: number; y: number; w: number; h: number } | null): void
+  /** 'copy' puts the capture on the clipboard and goes back to the previous app instead of the editor. */
+  finish(rect: { x: number; y: number; w: number; h: number } | null, mode?: CaptureMode): void
   /** This display started a new region: the others drop theirs. */
   claim(): void
   onClear(cb: () => void): void

@@ -1,4 +1,5 @@
 import { ExternalLink, X } from 'lucide-react'
+import { DEFAULT_EFFECTS, hasEffects, type LayerEffects } from '../core/effects'
 import iconUrl from '../../../../resources/icon.png'
 import { useEffect, useState } from 'react'
 import type { LibraryListing, Settings } from '../../../shared/api'
@@ -15,6 +16,8 @@ function Modal(props: {
   submitLabel?: string
   children: React.ReactNode
   wide?: boolean
+  /** Docked beside the canvas with no backdrop, so a live preview stays visible. */
+  docked?: boolean
 }): React.JSX.Element {
   useEffect(() => {
     const key = (e: KeyboardEvent): void => {
@@ -24,7 +27,7 @@ function Modal(props: {
     return () => window.removeEventListener('keydown', key)
   })
   return (
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
+    <div className={props.docked ? 'modal-back docked' : 'modal-back'} onMouseDown={(e) => !props.docked && e.target === e.currentTarget && props.onClose()}>
       <form
         className={props.wide ? 'modal wide' : 'modal'}
         onSubmit={(e) => {
@@ -495,6 +498,82 @@ function ShortcutsDialog(): React.JSX.Element {
   )
 }
 
+/** Drop shadow, outer glow and stroke for the active layer, previewed live; OK keeps them as one undo step. */
+function EffectsDialog(): React.JSX.Element | null {
+  const ed = useEditor()
+  const layer = ed.activeLayer()
+  const [start] = useState(() => ({ before: ed.snapshot(), original: layer?.effects }))
+  if (!layer) return null
+  const fx = layer.effects ?? DEFAULT_EFFECTS
+  const set = (next: LayerEffects): void => {
+    layer.effects = hasEffects(next) ? next : undefined
+    ed.changed()
+  }
+  const part = <K extends keyof LayerEffects>(k: K, patch: Partial<LayerEffects[K]>): void => set({ ...fx, [k]: { ...fx[k], ...patch } })
+  const cancel = (): void => {
+    layer.effects = start.original
+    ed.changed()
+    close()
+  }
+  const ok = (): void => {
+    close()
+    if (layer.effects !== start.original) ed.commit('Layer effects', start.before)
+  }
+  const colour = (value: string, onChange: (v: string) => void): React.JSX.Element => (
+    <label className="fx-color">
+      <span>Colour</span>
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  )
+  const pct = (v: number): number => Math.round(v * 100)
+  return (
+    <Modal title={`Layer effects · ${layer.name}`} onClose={cancel} onSubmit={ok} submitLabel="OK" docked>
+      <section className="fx-section">
+        <label className="check fx-head">
+          <input type="checkbox" checked={fx.shadow.on} onChange={(e) => part('shadow', { on: e.target.checked })} />
+          Drop shadow
+        </label>
+        {fx.shadow.on && (
+          <div className="fx-body">
+            {colour(fx.shadow.color, (color) => part('shadow', { color }))}
+            <Num label="Opacity" value={pct(fx.shadow.opacity)} min={0} max={100} suffix="%" onChange={(v) => part('shadow', { opacity: v / 100 })} />
+            <Num label="X" value={fx.shadow.x} min={-60} max={60} onChange={(x) => part('shadow', { x })} />
+            <Num label="Y" value={fx.shadow.y} min={-60} max={60} onChange={(y) => part('shadow', { y })} />
+            <Num label="Blur" value={fx.shadow.blur} min={0} max={80} onChange={(blur) => part('shadow', { blur })} />
+          </div>
+        )}
+      </section>
+      <section className="fx-section">
+        <label className="check fx-head">
+          <input type="checkbox" checked={fx.glow.on} onChange={(e) => part('glow', { on: e.target.checked })} />
+          Outer glow
+        </label>
+        {fx.glow.on && (
+          <div className="fx-body">
+            {colour(fx.glow.color, (color) => part('glow', { color }))}
+            <Num label="Opacity" value={pct(fx.glow.opacity)} min={0} max={100} suffix="%" onChange={(v) => part('glow', { opacity: v / 100 })} />
+            <Num label="Size" value={fx.glow.size} min={1} max={80} onChange={(size) => part('glow', { size })} />
+          </div>
+        )}
+      </section>
+      <section className="fx-section">
+        <label className="check fx-head">
+          <input type="checkbox" checked={fx.stroke.on} onChange={(e) => part('stroke', { on: e.target.checked })} />
+          Stroke
+        </label>
+        {fx.stroke.on && (
+          <div className="fx-body">
+            {colour(fx.stroke.color, (color) => part('stroke', { color }))}
+            <Num label="Size" value={fx.stroke.size} min={1} max={40} onChange={(size) => part('stroke', { size })} />
+            <Num label="Opacity" value={pct(fx.stroke.opacity)} min={0} max={100} suffix="%" onChange={(v) => part('stroke', { opacity: v / 100 })} />
+          </div>
+        )}
+      </section>
+      <p className="form-note">Effects stay editable: they follow the layer as you change it, and a merge or flatten bakes them in.</p>
+    </Modal>
+  )
+}
+
 const PROJECT_URL = 'https://github.com/jambalayadog/CaptureMarkupTool'
 
 /** "Electron 44.5.1 · Chromium 140.0.1" from the user agent (useful in bug reports). */
@@ -546,6 +625,8 @@ export function Dialogs(): React.JSX.Element | null {
       return <ShortcutsDialog />
     case 'about':
       return <AboutDialog />
+    case 'effects':
+      return ed.d ? <EffectsDialog /> : null
     default:
       return null
   }

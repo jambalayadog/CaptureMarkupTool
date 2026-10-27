@@ -10,6 +10,8 @@ export interface Rect {
   h: number
 }
 
+import type { LayerEffects } from './effects'
+
 export type BlendMode = GlobalCompositeOperation
 
 interface LayerBase {
@@ -20,6 +22,8 @@ interface LayerBase {
   opacity: number
   blend: BlendMode
   locked: boolean
+  /** Drop shadow, glow and stroke (replace the object to change it). */
+  effects?: LayerEffects
 }
 
 /** Pixel layer. Its canvas can be larger than the document and offset by (x, y). */
@@ -87,8 +91,8 @@ export interface TextObj {
   color: string
   /** Background box colour, or null for plain text. */
   bg: string | null
-  /** Speech-bubble pointer target (only drawn when bg is set). */
-  tail: Vec | null
+  /** Speech-bubble pointers (only drawn when bg is set); a callout is text with at least one. */
+  tails: Tail[]
   shadow: boolean
   /** Fixed box width, which the text wraps to. null sizes the box to the text. */
   boxW: number | null
@@ -96,6 +100,14 @@ export interface TextObj {
   boxH: number | null
   align: TextAlign
   valign: TextVAlign
+}
+
+/** A callout pointer: its tip, and the spot in the box it comes from (fractions of the box; 0.5 is the middle). */
+export interface Tail {
+  x: number
+  y: number
+  ax: number
+  ay: number
 }
 
 export type TextAlign = 'left' | 'center' | 'right'
