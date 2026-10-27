@@ -21,7 +21,6 @@ interface Win32 {
   AttachThreadInput: Fn
   BringWindowToTop: Fn
   SetForegroundWindow: Fn
-  ShowWindow: Fn
   GetWindowPid: Fn
   SendInput: Fn
   IsWindowVisible: Fn
@@ -65,7 +64,6 @@ function load(): Win32 | null {
       AttachThreadInput: user32.func('bool __stdcall AttachThreadInput(uint32 from, uint32 to, bool attach)'),
       BringWindowToTop: user32.func('bool __stdcall BringWindowToTop(IMK_HWND hwnd)'),
       SetForegroundWindow: user32.func('bool __stdcall SetForegroundWindow(IMK_HWND hwnd)'),
-      ShowWindow: user32.func('bool __stdcall ShowWindow(IMK_HWND hwnd, int cmd)'),
       GetWindowPid: user32.func('__stdcall', 'GetWindowThreadProcessId', 'uint32', [HWND, koffi.out(koffi.pointer('uint32'))]),
       SendInput: user32.func('uint32 __stdcall SendInput(uint32 count, void *inputs, int size)'),
       IsWindowVisible: user32.func('bool __stdcall IsWindowVisible(IMK_HWND hwnd)'),
@@ -101,23 +99,6 @@ export function foregroundWindow(): Buffer | null {
     return b
   } catch {
     return null
-  }
-}
-
-const SW_SHOWMINNOACTIVE = 7
-
-/**
- * Show a (hidden) window minimized without activating it. Electron's minimize()
- * activates a hidden window as it shows it, which would steal the keyboard.
- */
-export function showMinimizedInactive(handle: Buffer): boolean {
-  const w = load()
-  if (!w) return false
-  try {
-    w.ShowWindow(w.koffi.decode(handle, 'IMK_HWND'), SW_SHOWMINNOACTIVE)
-    return true
-  } catch {
-    return false
   }
 }
 

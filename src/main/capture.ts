@@ -24,7 +24,7 @@ export interface CaptureHooks {
   /** Hide the editor if visible; resolves true if it was hidden. */
   hideEditor(): Promise<boolean>
   restoreEditor(): void
-  /** Put the editor back without bringing it forward (minimized, not focused). */
+  /** Put the editor back without bringing it forward (minimized to the taskbar). */
   parkEditor(): void
   onCaptured(png: Buffer, info: CapturedInfo): void
   /** Whether a dragged region is adjusted before capturing (a setting). */
