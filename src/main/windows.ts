@@ -21,6 +21,8 @@ interface Win32 {
   AttachThreadInput: Fn
   BringWindowToTop: Fn
   SetForegroundWindow: Fn
+  ShowWindow: Fn
+  GetWindowPid: Fn
   SendInput: Fn
   IsWindowVisible: Fn
   IsIconic: Fn
@@ -63,6 +65,8 @@ function load(): Win32 | null {
       AttachThreadInput: user32.func('bool __stdcall AttachThreadInput(uint32 from, uint32 to, bool attach)'),
       BringWindowToTop: user32.func('bool __stdcall BringWindowToTop(IMK_HWND hwnd)'),
       SetForegroundWindow: user32.func('bool __stdcall SetForegroundWindow(IMK_HWND hwnd)'),
+      ShowWindow: user32.func('bool __stdcall ShowWindow(IMK_HWND hwnd, int cmd)'),
+      GetWindowPid: user32.func('__stdcall', 'GetWindowThreadProcessId', 'uint32', [HWND, koffi.out(koffi.pointer('uint32'))]),
       SendInput: user32.func('uint32 __stdcall SendInput(uint32 count, void *inputs, int size)'),
       IsWindowVisible: user32.func('bool __stdcall IsWindowVisible(IMK_HWND hwnd)'),
       IsIconic: user32.func('bool __stdcall IsIconic(IMK_HWND hwnd)'),
@@ -97,6 +101,23 @@ export function foregroundWindow(): Buffer | null {
     return b
   } catch {
     return null
+  }
+}
+
+const SW_SHOWMINNOACTIVE = 7
+
+/**
+ * Show a (hidden) window minimized without activating it. Electron's minimize()
+ * activates a hidden window as it shows it, which would steal the keyboard.
+ */
+export function showMinimizedInactive(handle: Buffer): boolean {
+  const w = load()
+  if (!w) return false
+  try {
+    w.ShowWindow(w.koffi.decode(handle, 'IMK_HWND'), SW_SHOWMINNOACTIVE)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -137,37 +158,70 @@ export function forceForeground(handle: Buffer): boolean {
   }
 }
 
-export function listWindows(): NativeWindow[] {
-  const w = load()
-  if (!w) return []
-  const out: NativeWindow[] = []
-  const buf = Buffer.alloc(512)
-  const visit = (hwnd: unknown): boolean => {
+/** The title of an ordinary app window (shown, not minimized, not a tool or cloaked window), else null. */
+function appWindowTitle(w: Win32, hwnd: unknown, buf: Buffer): string | null {
+  if (!w.IsWindowVisible(hwnd) || w.IsIconic(hwnd)) return null
+  const ex = w.GetWindowLongW(hwnd, GWL_EXSTYLE) as number
+  if (ex & WS_EX_TOOLWINDOW || ex & WS_EX_NOACTIVATE) return null
+  const cloaked = [0]
+  if (w.DwmGetInt(hwnd, DWMWA_CLOAKED, cloaked, 4) === 0 && cloaked[0] !== 0) return null
+  const len = w.GetWindowTextW(hwnd, buf, 255) as number
+  const title = len > 0 ? buf.toString('utf16le', 0, len * 2) : ''
+  return title && !IGNORED_TITLES.has(title) ? title : null
+}
+
+/** Visit top-level windows in z-order, topmost first, until `visit` returns false. */
+function enumWindows(w: Win32, visit: (hwnd: unknown) => boolean): void {
+  const cb = w.koffi.register((hwnd: unknown) => {
     try {
-      if (!w.IsWindowVisible(hwnd) || w.IsIconic(hwnd)) return true
-      const ex = w.GetWindowLongW(hwnd, GWL_EXSTYLE) as number
-      if (ex & WS_EX_TOOLWINDOW || ex & WS_EX_NOACTIVATE) return true
-      const cloaked = [0]
-      if (w.DwmGetInt(hwnd, DWMWA_CLOAKED, cloaked, 4) === 0 && cloaked[0] !== 0) return true
-      const len = w.GetWindowTextW(hwnd, buf, 255) as number
-      const title = len > 0 ? buf.toString('utf16le', 0, len * 2) : ''
-      if (!title || IGNORED_TITLES.has(title)) return true
-      const r: { left?: number; top?: number; right?: number; bottom?: number } = {}
-      if (w.DwmGetRect(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, r, 16) !== 0) return true
-      const width = (r.right ?? 0) - (r.left ?? 0)
-      const height = (r.bottom ?? 0) - (r.top ?? 0)
-      if (width < 8 || height < 8) return true
-      out.push({ x: r.left ?? 0, y: r.top ?? 0, w: width, h: height, title })
+      return visit(hwnd)
     } catch {
-      // skip windows we can't inspect
+      return true // skip windows we can't inspect
     }
-    return true
-  }
-  const cb = w.koffi.register(visit, w.koffi.pointer(w.proto))
+  }, w.koffi.pointer(w.proto))
   try {
     w.EnumWindows(cb, 0)
   } finally {
     w.koffi.unregister(cb)
   }
+}
+
+/**
+ * The topmost window of another app: where Alt+Tab would take you once our own
+ * windows are out of the way. Returned as a handle buffer for forceForeground.
+ */
+export function topOtherAppWindow(): Buffer | null {
+  const w = load()
+  if (!w) return null
+  const buf = Buffer.alloc(512)
+  const pid = [0]
+  let found: Buffer | null = null
+  enumWindows(w, (hwnd) => {
+    if (!appWindowTitle(w, hwnd, buf)) return true
+    w.GetWindowPid(hwnd, pid)
+    if (pid[0] === process.pid) return true
+    found = Buffer.alloc(8)
+    found.writeBigUInt64LE(w.koffi.address(hwnd))
+    return false
+  })
+  return found
+}
+
+export function listWindows(): NativeWindow[] {
+  const w = load()
+  if (!w) return []
+  const out: NativeWindow[] = []
+  const buf = Buffer.alloc(512)
+  enumWindows(w, (hwnd) => {
+    const title = appWindowTitle(w, hwnd, buf)
+    if (!title) return true
+    const r: { left?: number; top?: number; right?: number; bottom?: number } = {}
+    if (w.DwmGetRect(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, r, 16) !== 0) return true
+    const width = (r.right ?? 0) - (r.left ?? 0)
+    const height = (r.bottom ?? 0) - (r.top ?? 0)
+    if (width < 8 || height < 8) return true
+    out.push({ x: r.left ?? 0, y: r.top ?? 0, w: width, h: height, title })
+    return true
+  })
   return out
 }

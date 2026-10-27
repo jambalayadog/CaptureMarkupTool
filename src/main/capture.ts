@@ -1,5 +1,5 @@
 import { BrowserWindow, desktopCapturer, ipcMain, screen, type Display, type NativeImage, type WebContents } from 'electron'
-import { forceForeground, foregroundWindow, listWindows, type NativeWindow } from './windows'
+import { forceForeground, foregroundWindow, listWindows, topOtherAppWindow, type NativeWindow } from './windows'
 import type { CaptureMode, CaptureShowPayload, CaptureWindowRect } from '../shared/api'
 
 export interface CapturedInfo {
@@ -24,6 +24,8 @@ export interface CaptureHooks {
   /** Hide the editor if visible; resolves true if it was hidden. */
   hideEditor(): Promise<boolean>
   restoreEditor(): void
+  /** Put the editor back without bringing it forward (minimized, not focused). */
+  parkEditor(): void
   onCaptured(png: Buffer, info: CapturedInfo): void
   /** Whether a dragged region is adjusted before capturing (a setting). */
   adjustRegions(): boolean
@@ -206,11 +208,16 @@ export class CaptureManager {
     this.session++
     this.hideAll()
     this.active = false
-    // A copy goes back to whatever you were doing (the editor, if you started there).
-    if (mode === 'copy' || !png) {
-      if (this.restoreOnCancel) this.hooks.restoreEditor()
-      else if (mode === 'copy' && this.previous) forceForeground(this.previous)
-    }
+    if (mode === 'copy') {
+      // A copy never brings the app forward. Started from the editor (hidden for the
+      // capture), the editor goes back to the taskbar and the app beneath it gets the
+      // keyboard; otherwise the window you were using gets it back.
+      if (this.restoreOnCancel) {
+        this.hooks.parkEditor()
+        const other = topOtherAppWindow()
+        if (other) forceForeground(other)
+      } else if (this.previous) forceForeground(this.previous)
+    } else if (!png && this.restoreOnCancel) this.hooks.restoreEditor()
     if (png) this.hooks.onCaptured(png, { mode, at })
   }
 

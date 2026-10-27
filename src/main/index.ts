@@ -8,6 +8,7 @@ import { explainWriteError } from './fsutil'
 import { Library } from './library'
 import { captureFolder, defaultCaptureFolder, loadSettings, saveSettings } from './settings'
 import { Updater } from './updater'
+import { showMinimizedInactive } from './windows'
 import type { FileKind, OpenedFile, Settings } from '../shared/api'
 
 const ICON = join(__dirname, '../../resources/icon.png')
@@ -434,6 +435,9 @@ if (!app.requestSingleInstanceLock()) {
         return true
       },
       restoreEditor: showEditor,
+      parkEditor: () => {
+        if (editor && !showMinimizedInactive(editor.getNativeWindowHandle())) editor.minimize()
+      },
       adjustRegions: () => settings.captureAdjust,
       onCaptured: async (png, { mode, at }) => {
         const copy = mode === 'copy'
