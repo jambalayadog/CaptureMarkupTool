@@ -81,9 +81,11 @@ export function Num(props: {
   suffix?: string
   title?: string
   slider?: boolean
+  /** A shorter slider, for crowded option bars. */
+  narrow?: boolean
   onChange: (v: number) => void
 }): React.JSX.Element {
-  const { label, value, min, max, step = 1, suffix, title, slider = true, onChange } = props
+  const { label, value, min, max, step = 1, suffix, title, slider = true, narrow, onChange } = props
   const [text, setText] = useState(String(value))
   useEffect(() => setText(String(Math.round(value * 100) / 100)), [value])
   const commit = (s: string): void => {
@@ -92,7 +94,7 @@ export function Num(props: {
     else setText(String(value))
   }
   return (
-    <label className="num" title={title}>
+    <label className={narrow ? 'num narrow' : 'num'} title={title}>
       {label && <span className="num-label">{label}</span>}
       {slider && (
         <input

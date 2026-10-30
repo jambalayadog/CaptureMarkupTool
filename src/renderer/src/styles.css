@@ -429,6 +429,10 @@ body.electron .titlebar {
   accent-color: var(--accent);
 }
 
+.num.narrow input[type='range'] {
+  width: 56px;
+}
+
 .num-input {
   width: 46px;
   height: 26px;

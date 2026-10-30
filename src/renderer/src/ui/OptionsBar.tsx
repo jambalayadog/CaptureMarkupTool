@@ -105,9 +105,9 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
   const set_ = <K extends keyof ToolOptions>(k: K) => (v: ToolOptions[K]) => ed.setOpt(k, v)
   const shadow = <Toggle active={o.shadow} title="Drop shadow" onClick={() => ed.setOpt('shadow', !o.shadow)}>Shadow</Toggle>
   const dashed = <Toggle active={o.dashed} title="Dashed outline" onClick={() => ed.setOpt('dashed', !o.dashed)}>Dashed</Toggle>
-  const width = <Num label="Width" value={o.strokeWidth} min={1} max={60} onChange={set_('strokeWidth')} />
+  const width = <Num label="Width" value={o.strokeWidth} min={1} max={60} narrow onChange={set_('strokeWidth')} />
   const headSizeNum = (k: 'arrowStartSize' | 'arrowEndSize', end: string): React.JSX.Element => (
-    <Num value={o[k]} min={4} max={300} slider={false} suffix="px" title={`${end} head size (separate from the line width)`} onChange={set_(k)} />
+    <Num value={o[k]} min={4} max={200} narrow title={`${end} head size in px (separate from the line width)`} onChange={set_(k)} />
   )
   const bent = ed.selectedObjects().some((s) => s.type === 'line' && s.via?.length)
   const straighten = bent ? (
