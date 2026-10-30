@@ -36,7 +36,9 @@ function create(ed: Editor, tool: ShapeTool, p: Vec): VObj {
         width: o.strokeWidth,
         start: tool === 'arrow' ? o.arrowStart : 'none',
         end: tool === 'arrow' ? o.arrowEnd : 'none',
-        headScale: o.arrowHeadScale,
+        startSize: o.arrowStartSize,
+        endSize: o.arrowEndSize,
+        via: [],
         dashed: o.dashed,
         shadow: o.shadow
       }

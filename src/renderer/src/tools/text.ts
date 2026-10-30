@@ -177,6 +177,7 @@ export const stepTool: Tool = {
       n: ed.nextStepNumber(),
       size: ed.opts.stepSize,
       color: ed.primary,
+      textColor: ed.opts.stepSecondaryText ? ed.secondary : null,
       shadow: ed.opts.shadow
     }
     layer.objects.push(obj)

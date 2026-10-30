@@ -116,63 +116,165 @@ function addCircle(p: Path2D, c: Vec, r: number): void {
   p.arc(c.x, c.y, r, 0, Math.PI * 2)
 }
 
-/** Older projects have no headScale. */
-const headScale = (o: LineObj): number => o.headScale ?? 1
+/** Older arrows sized their heads from the line width (times a percentage). */
+const legacyHead = (o: LineObj): number => Math.max(10, o.width * 3.2 + 6) * ((o as { headScale?: number }).headScale ?? 1)
 
+/** Arrowhead size in px at one end of a line. */
+export function headSize(o: LineObj, end: 'start' | 'end'): number {
+  return (end === 'start' ? o.startSize : o.endSize) ?? legacyHead(o)
+}
+
+/** The bigger of a line's two heads (for bounds). */
 export function headLength(o: LineObj): number {
-  return Math.max(10, o.width * 3.2 + 6) * headScale(o)
+  return Math.max(headSize(o, 'start'), headSize(o, 'end'))
+}
+
+// ---- line paths: straight, or a smooth curve through bend points ---------------
+
+const pointsOf = (o: LineObj): Vec[] => [{ x: o.x1, y: o.y1 }, ...(o.via ?? []), { x: o.x2, y: o.y2 }]
+
+type Cubic = [Vec, Vec, Vec, Vec]
+
+/** The stretch of curve from point i to i+1, as a cubic Bézier (Catmull-Rom through every point). */
+function curveSegment(pts: Vec[], i: number): Cubic {
+  const p0 = pts[i - 1] ?? pts[i]
+  const p1 = pts[i]
+  const p2 = pts[i + 1]
+  const p3 = pts[i + 2] ?? pts[i + 1]
+  return [p1, { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 }, { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 }, p2]
+}
+
+function bezierAt(c: Cubic, t: number): Vec {
+  const u = 1 - t
+  const a = u * u * u
+  const b = 3 * u * u * t
+  const d = 3 * u * t * t
+  const e = t * t * t
+  return { x: a * c[0].x + b * c[1].x + d * c[2].x + e * c[3].x, y: a * c[0].y + b * c[1].y + d * c[2].y + e * c[3].y }
+}
+
+/** A line's centre as a polyline: its two ends, or samples along the curve through its bends. */
+export function linePath(o: LineObj): Vec[] {
+  const pts = pointsOf(o)
+  if (pts.length === 2) return pts
+  const out = [pts[0]]
+  for (let i = 0; i < pts.length - 1; i++) {
+    const seg = curveSegment(pts, i)
+    const n = Math.max(8, Math.ceil(Math.hypot(seg[3].x - seg[0].x, seg[3].y - seg[0].y) / 5))
+    for (let k = 1; k <= n; k++) out.push(bezierAt(seg, k / n))
+  }
+  return out
+}
+
+function pathLength(pts: Vec[]): number {
+  let len = 0
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+  return len
+}
+
+/** The path with `d` px cut off its start. */
+function trimStart(pts: Vec[], d: number): Vec[] {
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    const seg = Math.hypot(b.x - a.x, b.y - a.y)
+    if (d <= seg) {
+      const t = seg ? d / seg : 0
+      return [{ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, ...pts.slice(i)]
+    }
+    d -= seg
+  }
+  return [pts[pts.length - 1], pts[pts.length - 1]]
+}
+
+const trimEnd = (pts: Vec[], d: number): Vec[] => trimStart([...pts].reverse(), d).reverse()
+
+/** A filled outline of the path at width 2·hw (a rectangle for a straight line). */
+function outlineOf(pts: Vec[], hw: number): Vec[] {
+  const left: Vec[] = []
+  const right: Vec[] = []
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)]
+    const b = pts[Math.min(pts.length - 1, i + 1)]
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    const nx = (-(b.y - a.y) / len) * hw
+    const ny = ((b.x - a.x) / len) * hw
+    left.push({ x: pts[i].x + nx, y: pts[i].y + ny })
+    right.push({ x: pts[i].x - nx, y: pts[i].y - ny })
+  }
+  return [...left, ...right.reverse()]
 }
 
 interface LineGeom {
-  shaft: [Vec, Vec]
+  /** The centre line between the heads. */
+  shaft: Vec[]
   heads: Path2D
   full: Path2D
 }
 
 function lineGeom(o: LineObj): LineGeom {
-  const a = { x: o.x1, y: o.y1 }
-  const b = { x: o.x2, y: o.y2 }
-  const len = Math.hypot(b.x - a.x, b.y - a.y) || 0.0001
-  const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
-  const n = { x: -u.y, y: u.x }
+  const path = linePath(o)
+  const len = pathLength(path) || 0.0001
   const hw = o.width / 2
   const heads = new Path2D()
   const full = new Path2D()
   const both = o.start === 'arrow' && o.end === 'arrow'
   const maxHead = len * (both ? 0.45 : 0.9)
-  const L = Math.min(headLength(o), Math.max(maxHead, o.width * 1.5))
-  const W = L * 0.52
-  let s = a
-  let e = b
 
-  const addHead = (tip: Vec, dir: Vec, kind: LineObj['end']): Vec => {
+  // Returns how much of the path the head covers (the shaft stops there).
+  const addHead = (end: 'start' | 'end', kind: LineObj['end']): number => {
+    const ordered = end === 'end' ? path : [...path].reverse()
+    const tip = ordered[ordered.length - 1]
     if (kind === 'arrow') {
+      // never narrower than the line, and shrunk to fit a short line
+      const L = Math.max(o.width * 1.5, Math.min(headSize(o, end), Math.max(maxHead, o.width * 1.5)))
+      // point along the curve: from L back along the path to the tip
+      const back = trimEnd(ordered, Math.min(L, len)).at(-1)!
+      const dl = Math.hypot(tip.x - back.x, tip.y - back.y) || 1
+      const dir = { x: (tip.x - back.x) / dl, y: (tip.y - back.y) / dl }
+      const n = { x: -dir.y, y: dir.x }
+      const W = L * 0.52
       const base = { x: tip.x - dir.x * L, y: tip.y - dir.y * L }
       const notch = { x: tip.x - dir.x * L * 0.74, y: tip.y - dir.y * L * 0.74 }
       const poly = [tip, { x: base.x + n.x * W, y: base.y + n.y * W }, notch, { x: base.x - n.x * W, y: base.y - n.y * W }]
       addPoly(heads, poly)
       addPoly(full, poly)
-      return { x: tip.x - dir.x * L * 0.62, y: tip.y - dir.y * L * 0.62 }
+      return L * 0.62
     }
     if (kind === 'dot') {
-      const r = Math.max(o.width * 1.6, 4) * headScale(o)
+      const r = Math.max(o.width * 0.8, headSize(o, end) * 0.4)
       addCircle(heads, tip, r)
       addCircle(full, tip, r)
     }
-    return tip
+    return 0
   }
-  e = addHead(b, u, o.end)
-  s = addHead(a, { x: -u.x, y: -u.y }, o.start)
+  const cutEnd = addHead('end', o.end)
+  const cutStart = addHead('start', o.start)
+  let shaft = trimEnd(trimStart(path, cutStart), cutEnd)
+  if (cutStart + cutEnd >= len) {
+    // the heads meet: no shaft between them
+    const mid = trimStart(path, len / 2)[0]
+    shaft = [mid, mid]
+  }
+  addPoly(full, outlineOf(shaft, hw))
+  if (o.start === 'none') addCircle(full, path[0], hw)
+  if (o.end === 'none') addCircle(full, path[path.length - 1], hw)
+  return { shaft, heads, full }
+}
 
-  addPoly(full, [
-    { x: s.x + n.x * hw, y: s.y + n.y * hw },
-    { x: e.x + n.x * hw, y: e.y + n.y * hw },
-    { x: e.x - n.x * hw, y: e.y - n.y * hw },
-    { x: s.x - n.x * hw, y: s.y - n.y * hw }
-  ])
-  if (o.start === 'none') addCircle(full, a, hw)
-  if (o.end === 'none') addCircle(full, b, hw)
-  return { shaft: [s, e], heads, full }
+/** Knobs beside the middle of each stretch of a line, for adding a bend there. */
+function bendKnobs(o: LineObj, gap: number): Handle[] {
+  const pts = pointsOf(o)
+  const out: Handle[] = []
+  for (let i = 0; i < pts.length - 1; i++) {
+    const seg = curveSegment(pts, i)
+    const mid = bezierAt(seg, 0.5)
+    const a = bezierAt(seg, 0.45)
+    const b = bezierAt(seg, 0.55)
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    out.push({ id: `add-via-${i}`, x: mid.x - ((b.y - a.y) / len) * gap, y: mid.y + ((b.x - a.x) / len) * gap })
+  }
+  return out
 }
 
 function drawLine(ctx: CanvasRenderingContext2D, o: LineObj): void {
@@ -186,10 +288,10 @@ function drawLine(ctx: CanvasRenderingContext2D, o: LineObj): void {
   ctx.strokeStyle = o.color
   ctx.lineWidth = o.width
   ctx.lineCap = 'butt'
+  ctx.lineJoin = 'round'
   ctx.setLineDash([o.width * 2.4, o.width * 1.6])
   ctx.beginPath()
-  ctx.moveTo(g.shaft[0].x, g.shaft[0].y)
-  ctx.lineTo(g.shaft[1].x, g.shaft[1].y)
+  g.shaft.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)))
   ctx.stroke()
   ctx.setLineDash([])
   ctx.fill(g.heads)
@@ -303,7 +405,7 @@ function drawStep(ctx: CanvasRenderingContext2D, o: StepObj): void {
   const label = String(o.n)
   const fs = o.size * (label.length > 2 ? 0.38 : label.length > 1 ? 0.46 : 0.56)
   ctx.font = `700 ${fs}px "Segoe UI", system-ui, sans-serif`
-  ctx.fillStyle = contrastText(o.color)
+  ctx.fillStyle = o.textColor ?? contrastText(o.color)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(label, o.x, o.y + fs * 0.04)
@@ -402,8 +504,10 @@ export function objBounds(o: VObj): Rect {
     case 'redact':
       return normRect({ x: o.x, y: o.y }, { x: o.x + o.w, y: o.y + o.h })
     case 'line': {
-      const r = normRect({ x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 })
-      return r
+      const path = linePath(o)
+      const xs = path.map((q) => q.x)
+      const ys = path.map((q) => q.y)
+      return normRect({ x: Math.min(...xs), y: Math.min(...ys) }, { x: Math.max(...xs), y: Math.max(...ys) })
     }
     case 'text': {
       const L = textLayout(o)
@@ -461,12 +565,12 @@ export function hitObject(o: VObj, p: Vec, tol: number): boolean {
       }
       return false
     }
-    case 'line':
+    case 'line': {
       // the shaft (with some slack), or anywhere on the drawn heads
-      return (
-        distToSegment(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }) <= o.width / 2 + tol ||
-        ((o.start !== 'none' || o.end !== 'none') && measure.isPointInPath(lineGeom(o).full, p.x, p.y))
-      )
+      const path = linePath(o)
+      for (let i = 1; i < path.length; i++) if (distToSegment(p, path[i - 1], path[i]) <= o.width / 2 + tol) return true
+      return (o.start !== 'none' || o.end !== 'none') && measure.isPointInPath(lineGeom(o).full, p.x, p.y)
+    }
     case 'step':
       return Math.hypot(p.x - o.x, p.y - o.y) <= o.size / 2 + tol
     case 'path': {
@@ -480,7 +584,15 @@ export function hitObject(o: VObj, p: Vec, tol: number): boolean {
 
 export type RectHandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 /** Callout pointers: `tail-N` is a tip, `base-N` slides where it leaves the box, `add-tail` makes a new one. */
-export type HandleId = RectHandleId | 'p1' | 'p2' | `tail-${number}` | `base-${number}` | 'add-tail'
+export type HandleId =
+  | RectHandleId
+  | 'p1'
+  | 'p2'
+  | `via-${number}`
+  | `add-via-${number}`
+  | `tail-${number}`
+  | `base-${number}`
+  | 'add-tail'
 
 export interface Handle {
   id: HandleId
@@ -510,9 +622,12 @@ export function handlesOf(o: VObj, zoom = 1): Handle[] {
     case 'redact':
       return rectHandles(objBounds(o))
     case 'line':
+      // ends, bend points, then a "+" beside each stretch to add a bend
       return [
         { id: 'p1', x: o.x1, y: o.y1 },
-        { id: 'p2', x: o.x2, y: o.y2 }
+        { id: 'p2', x: o.x2, y: o.y2 },
+        ...(o.via ?? []).map((v, i): Handle => ({ id: `via-${i}`, x: v.x, y: v.y })),
+        ...bendKnobs(o, 14 / zoom)
       ]
     case 'text': {
       // the box resizes (text wraps to it); a bubble also has its pointers and a knob for adding one
@@ -545,12 +660,12 @@ const RESIZE_CURSORS: Record<RectHandleId, string> = {
 }
 
 export function handleCursor(id: HandleId): string {
-  if (id === 'add-tail') return 'copy'
+  if (id === 'add-tail' || id.startsWith('add-via-')) return 'copy'
   if (id.startsWith('base-')) return 'move'
   return RESIZE_CURSORS[id as RectHandleId] ?? 'crosshair'
 }
 
-const handleIndex = (id: string): number => Number(id.slice(id.indexOf('-') + 1))
+const handleIndex = (id: string): number => Number(id.slice(id.lastIndexOf('-') + 1))
 
 /** Resize a rectangle by dragging one of its 8 handles. */
 export function dragRectHandle(orig: Rect, id: HandleId, p: Vec, keepAspect: boolean): Rect {
@@ -584,6 +699,16 @@ export function dragRectHandle(orig: Rect, id: HandleId, p: Vec, keepAspect: boo
  * handle to keep dragging (dragging "add pointer" turns into dragging the new tip).
  */
 export function dragHandle(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boolean): HandleId {
+  if (o.type === 'line' && (id.startsWith('via-') || id.startsWith('add-via-'))) {
+    o.via = [...(o.via ?? [])]
+    const i = handleIndex(id)
+    if (id.startsWith('add-via-')) {
+      o.via.splice(i, 0, { x: p.x, y: p.y })
+      return `via-${i}`
+    }
+    if (o.via[i]) o.via[i] = { x: p.x, y: p.y }
+    return id
+  }
   if (o.type === 'text' && (id === 'add-tail' || id.startsWith('tail-') || id.startsWith('base-'))) {
     o.tails = [...tailsOf(o)]
     if (id === 'add-tail') {
@@ -613,6 +738,13 @@ export function clickHandle(o: VObj, id: HandleId): boolean {
   return true
 }
 
+/** Double-clicking a bend point straightens the line there. */
+export function removeBend(o: VObj, id: HandleId): boolean {
+  if (o.type !== 'line' || !id.startsWith('via-') || id.startsWith('add-')) return false
+  o.via = (o.via ?? []).filter((_, i) => i !== handleIndex(id))
+  return true
+}
+
 /** After a handle drag: a pointer dragged back inside its bubble is removed. */
 export function endHandleDrag(o: VObj): void {
   if (o.type !== 'text' || !tailsOf(o).length) return
@@ -625,12 +757,14 @@ function dragOther(o: VObj, orig: VObj, id: HandleId, p: Vec, shift: boolean): v
     const r = dragRectHandle(objBounds(orig), id, p, shift)
     Object.assign(o, r)
   } else if (o.type === 'line' && orig.type === 'line') {
+    // Shift snaps an end to 45° from its neighbour (the nearest bend, or the other end)
+    const via = o.via ?? []
     if (id === 'p1') {
-      const q = shift ? snap45({ x: o.x2, y: o.y2 }, p) : p
+      const q = shift ? snap45(via[0] ?? { x: o.x2, y: o.y2 }, p) : p
       o.x1 = q.x
       o.y1 = q.y
     } else if (id === 'p2') {
-      const q = shift ? snap45({ x: o.x1, y: o.y1 }, p) : p
+      const q = shift ? snap45(via[via.length - 1] ?? { x: o.x1, y: o.y1 }, p) : p
       o.x2 = q.x
       o.y2 = q.y
     }
@@ -676,6 +810,7 @@ export function moveObject(o: VObj, orig: VObj, dx: number, dy: number): void {
       o.y1 = src.y1 + dy
       o.x2 = src.x2 + dx
       o.y2 = src.y2 + dy
+      o.via = (src.via ?? []).map((v) => ({ x: v.x + dx, y: v.y + dy }))
       break
     }
     case 'path': {
@@ -706,6 +841,7 @@ export function offsetObject(o: VObj, dx: number, dy: number): void {
       o.y1 += dy
       o.x2 += dx
       o.y2 += dy
+      o.via = (o.via ?? []).map((v) => ({ x: v.x + dx, y: v.y + dy }))
       break
     case 'path':
       o.points = o.points.map((p) => ({ x: p.x + dx, y: p.y + dy }))
@@ -735,7 +871,10 @@ export function transformObject(o: VObj, map: (p: Vec) => Vec, scale: number): v
       const a = map({ x: o.x1, y: o.y1 })
       const b = map({ x: o.x2, y: o.y2 })
       Object.assign(o, { x1: a.x, y1: a.y, x2: b.x, y2: b.y })
+      o.via = (o.via ?? []).map(map)
       o.width *= scale
+      o.startSize = headSize(o, 'start') * scale
+      o.endSize = headSize(o, 'end') * scale
       break
     }
     case 'text': {
@@ -804,9 +943,10 @@ export function setObjectColor(o: VObj, color: string): void {
 /** A short name for an object, for menus and lists: "Arrow", "Text “Hello…”", "Step 3". */
 export function describeObject(o: VObj): string {
   switch (o.type) {
-    case 'line':
-      if (o.start === 'arrow' && o.end === 'arrow') return 'Double arrow'
-      return o.start === 'none' && o.end === 'none' ? 'Line' : 'Arrow'
+    case 'line': {
+      const name = o.start === 'arrow' && o.end === 'arrow' ? 'Double arrow' : o.start === 'none' && o.end === 'none' ? 'Line' : 'Arrow'
+      return o.via?.length ? `Curved ${name.toLowerCase()}` : name
+    }
     case 'rect':
       return 'Rectangle'
     case 'ellipse':

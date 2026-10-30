@@ -22,6 +22,9 @@ import {
   fontOf,
   handlesOf,
   handleCursor,
+  headSize,
+  linePath,
+  removeBend,
   tailsOf,
   hitObject,
   objBounds,
@@ -1004,6 +1007,10 @@ export class Editor {
 
   setSecondary(c: string): void {
     this.secondary = normalizeHex(c)
+    // selected steps numbered in the secondary colour follow it
+    if (this.selectedObjects().some((o) => o.type === 'step' && o.textColor) && !this.textEdit) {
+      this.updateSelected((o) => o.type === 'step' && o.textColor && (o.textColor = this.secondary), 'Change colour', 'colour2')
+    }
     this.emit()
   }
 
@@ -1235,7 +1242,14 @@ export class Editor {
 
   dblclick(e: MouseEvent): void {
     if (!this.d || this.textEdit) return
-    this.toolImpl.dblclick?.(this, this.pinfo(e))
+    const p = this.pinfo(e)
+    // double-clicking a bend point straightens the line there
+    const h = this.hitHandle(p.screen)
+    if (h) {
+      const before = this.snapshot()
+      if (removeBend(h.obj, h.handle.id)) return this.commit('Remove bend', before)
+    }
+    this.toolImpl.dblclick?.(this, p)
   }
 
   wheel(e: WheelEvent): void {
@@ -1591,14 +1605,15 @@ export class Editor {
     const sel = this.selectedObjects()
     for (const o of sel) {
       if (o.type === 'line' && sel.length === 1) {
-        const a = this.toScreen({ x: o.x1, y: o.y1 })
-        const b = this.toScreen({ x: o.x2, y: o.y2 })
         ctx.strokeStyle = ACCENT
         ctx.lineWidth = 1
         ctx.setLineDash([3, 3])
         ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
+        linePath(o).forEach((q, i) => {
+          const s = this.toScreen(q)
+          if (i) ctx.lineTo(s.x, s.y)
+          else ctx.moveTo(s.x, s.y)
+        })
         ctx.stroke()
         ctx.setLineDash([])
       } else this.outlineObject(ctx, o, ACCENT, true)
@@ -1611,21 +1626,24 @@ export class Editor {
         ctx.strokeStyle = ACCENT
         ctx.lineWidth = 1.5
         ctx.beginPath()
-        if (hd.id === 'add-tail') {
+        if (hd.id === 'add-tail' || hd.id.startsWith('add-via-')) {
+          // a "+" knob: callouts' is bigger, a line's is small enough to sit beside thin arrows
+          const r = hd.id === 'add-tail' ? 7 : 5.5
           ctx.fillStyle = ACCENT
-          ctx.arc(s.x, s.y, 7, 0, Math.PI * 2)
+          ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
           ctx.fill()
           ctx.strokeStyle = '#fff'
-          ctx.lineWidth = 2
+          ctx.lineWidth = r > 6 ? 2 : 1.6
           ctx.beginPath()
-          ctx.moveTo(s.x - 3.5, s.y)
-          ctx.lineTo(s.x + 3.5, s.y)
-          ctx.moveTo(s.x, s.y - 3.5)
-          ctx.lineTo(s.x, s.y + 3.5)
+          ctx.moveTo(s.x - r / 2, s.y)
+          ctx.lineTo(s.x + r / 2, s.y)
+          ctx.moveTo(s.x, s.y - r / 2)
+          ctx.lineTo(s.x, s.y + r / 2)
           ctx.stroke()
           continue
         }
         if (hd.id === 'p1' || hd.id === 'p2' || hd.id.startsWith('tail-')) ctx.arc(s.x, s.y, 5, 0, Math.PI * 2)
+        else if (hd.id.startsWith('via-')) ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2)
         else if (hd.id.startsWith('base-')) {
           ctx.moveTo(s.x, s.y - 5)
           ctx.lineTo(s.x + 5, s.y)
@@ -1656,12 +1674,13 @@ export class Editor {
     ctx.lineWidth = 1
     if (dashed) ctx.setLineDash([4, 3])
     if (o.type === 'line') {
-      const a = this.toScreen({ x: o.x1, y: o.y1 })
-      const e = this.toScreen({ x: o.x2, y: o.y2 })
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.moveTo(a.x, a.y)
-      ctx.lineTo(e.x, e.y)
+      linePath(o).forEach((q, i) => {
+        const s = this.toScreen(q)
+        if (i) ctx.lineTo(s.x, s.y)
+        else ctx.moveTo(s.x, s.y)
+      })
       ctx.stroke()
     } else if (o.type === 'step') {
       const c = this.toScreen({ x: o.x, y: o.y })
@@ -1715,7 +1734,15 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
     case 'ellipse':
       return { strokeWidth: o.strokeWidth, shapeFill: !!o.fill, cornerRadius: o.radius, dashed: o.dashed, shadow: o.shadow }
     case 'line':
-      return { strokeWidth: o.width, arrowStart: o.start, arrowEnd: o.end, arrowHeadScale: o.headScale ?? 1, dashed: o.dashed, shadow: o.shadow }
+      return {
+        strokeWidth: o.width,
+        arrowStart: o.start,
+        arrowEnd: o.end,
+        arrowStartSize: Math.round(headSize(o, 'start')),
+        arrowEndSize: Math.round(headSize(o, 'end')),
+        dashed: o.dashed,
+        shadow: o.shadow
+      }
     case 'text':
       return {
         fontSize: o.fontSize,
@@ -1727,7 +1754,7 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
         ...(tailsOf(o).length ? {} : { textBg: !!o.bg })
       }
     case 'step':
-      return { stepSize: o.size, shadow: o.shadow }
+      return { stepSize: o.size, shadow: o.shadow, stepSecondaryText: o.textColor != null }
     case 'path':
       return { highlightWidth: o.width, highlightOpacity: o.opacity }
     case 'redact':
@@ -1754,7 +1781,8 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       if (k === 'strokeWidth') return set(o, { width: v as number })
       if (k === 'arrowStart') return set(o, { start: v as LineHead })
       if (k === 'arrowEnd') return set(o, { end: v as LineHead })
-      if (k === 'arrowHeadScale') return set(o, { headScale: v as number })
+      if (k === 'arrowStartSize') return set(o, { startSize: v as number })
+      if (k === 'arrowEndSize') return set(o, { endSize: v as number })
       if (k === 'dashed') return set(o, { dashed: v as boolean })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
       return false
@@ -1769,6 +1797,7 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       return false
     case 'step':
       if (k === 'stepSize') return set(o, { size: v as number })
+      if (k === 'stepSecondaryText') return set(o, { textColor: v ? ed.secondary : null })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
       return false
     case 'path':

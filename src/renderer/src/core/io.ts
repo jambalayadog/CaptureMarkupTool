@@ -87,11 +87,22 @@ export async function decodeProject(bytes: Uint8Array): Promise<DecodedProject> 
 
 /** Objects saved by older versions: a callout's single `tail` is now a list of pointers. */
 function upgradeObject(raw: unknown): VObj {
-  const o = raw as VObj & { tail?: Vec | null }
+  const o = raw as VObj & { tail?: Vec | null; headScale?: number }
   if (o.type === 'text' && !Array.isArray(o.tails)) {
     o.tails = o.tail ? [{ x: o.tail.x, y: o.tail.y, ax: 0.5, ay: 0.5 }] : []
     delete o.tail
   }
+  // lines: head sizes in px (they were a % of a width-based size), and bend points
+  if (o.type === 'line') {
+    if (o.startSize == null || o.endSize == null) {
+      const size = Math.max(10, o.width * 3.2 + 6) * (o.headScale ?? 1)
+      o.startSize ??= size
+      o.endSize ??= size
+    }
+    delete o.headScale
+    o.via ??= []
+  }
+  if (o.type === 'step') o.textColor ??= null
   return o
 }
 

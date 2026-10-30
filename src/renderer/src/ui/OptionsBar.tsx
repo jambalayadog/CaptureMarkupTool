@@ -94,6 +94,8 @@ function TextBoxOptions({ ed }: { ed: Editor }): React.JSX.Element {
   )
 }
 
+const VECTOR_LINE_HINT = <span className="opt-hint">Drag a + beside the line to bend it</span>
+
 function Swatch({ color }: { color: string }): React.JSX.Element {
   return <span className="mini-swatch" style={{ background: color }} />
 }
@@ -104,6 +106,21 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
   const shadow = <Toggle active={o.shadow} title="Drop shadow" onClick={() => ed.setOpt('shadow', !o.shadow)}>Shadow</Toggle>
   const dashed = <Toggle active={o.dashed} title="Dashed outline" onClick={() => ed.setOpt('dashed', !o.dashed)}>Dashed</Toggle>
   const width = <Num label="Width" value={o.strokeWidth} min={1} max={60} onChange={set_('strokeWidth')} />
+  const headSizeNum = (k: 'arrowStartSize' | 'arrowEndSize', end: string): React.JSX.Element => (
+    <Num value={o[k]} min={4} max={300} slider={false} suffix="px" title={`${end} head size (separate from the line width)`} onChange={set_(k)} />
+  )
+  const bent = ed.selectedObjects().some((s) => s.type === 'line' && s.via?.length)
+  const straighten = bent ? (
+    <button
+      className="btn"
+      title="Remove every bend (or double-click one bend point to remove it)"
+      onClick={() => ed.updateSelected((s) => s.type === 'line' && (s.via = []), 'Straighten')}
+    >
+      Straighten
+    </button>
+  ) : (
+    VECTOR_LINE_HINT
+  )
   const font = (
     <>
       <Sel value={o.fontFamily} options={FONTS} onChange={set_('fontFamily')} title="Font" />
@@ -120,20 +137,13 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           {width}
           <span className="opt-label">Start</span>
           <Seg value={o.arrowStart} options={HEADS_START} onChange={set_('arrowStart')} />
+          {o.arrowStart !== 'none' && headSizeNum('arrowStartSize', 'Start')}
           <span className="opt-label">End</span>
           <Seg value={o.arrowEnd} options={HEADS_END} onChange={set_('arrowEnd')} />
-          <Num
-            label="Head"
-            value={Math.round(o.arrowHeadScale * 100)}
-            min={25}
-            max={400}
-            step={5}
-            suffix="%"
-            title="Arrowhead size, relative to the line width"
-            onChange={(v) => ed.setOpt('arrowHeadScale', v / 100)}
-          />
+          {o.arrowEnd !== 'none' && headSizeNum('arrowEndSize', 'End')}
           {dashed}
           {shadow}
+          {straighten}
         </>
       )
     case 'line':
@@ -142,6 +152,7 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           {width}
           {dashed}
           {shadow}
+          {straighten}
         </>
       )
     case 'rect':
@@ -183,6 +194,13 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
       return (
         <>
           <Num label="Size" value={o.stepSize} min={12} max={160} onChange={set_('stepSize')} />
+          <Toggle
+            active={o.stepSecondaryText}
+            title="Draw the number in the secondary colour instead of black or white"
+            onClick={() => ed.setOpt('stepSecondaryText', !o.stepSecondaryText)}
+          >
+            <Swatch color={ed.secondary} /> Use secondary for #
+          </Toggle>
           {shadow}
           {steps.length === 1 && (
             <Num

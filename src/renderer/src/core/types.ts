@@ -72,8 +72,11 @@ export interface LineObj {
   width: number
   start: Head
   end: Head
-  /** Arrowhead and dot size relative to the default for this width (1 = 100%). */
-  headScale: number
+  /** Arrowhead (or dot) size in px at each end, independent of the line width. */
+  startSize: number
+  endSize: number
+  /** Points the line bends through, as a smooth curve; empty for a straight line. */
+  via: Vec[]
   dashed: boolean
   shadow: boolean
 }
@@ -122,6 +125,8 @@ export interface StepObj {
   n: number
   size: number
   color: string
+  /** Colour of the number; null picks black or white to stand out on the circle. */
+  textColor: string | null
   shadow: boolean
 }
 
@@ -220,7 +225,8 @@ export interface ToolOptions {
   shadow: boolean
   arrowStart: Head
   arrowEnd: Head
-  arrowHeadScale: number
+  arrowStartSize: number
+  arrowEndSize: number
   fontSize: number
   fontFamily: string
   bold: boolean
@@ -228,6 +234,7 @@ export interface ToolOptions {
   textAlign: TextAlign
   textVAlign: TextVAlign
   stepSize: number
+  stepSecondaryText: boolean
   highlightWidth: number
   highlightOpacity: number
   redactMode: RedactMode
