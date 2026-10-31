@@ -275,11 +275,17 @@ body.electron .titlebar {
   font-weight: 600;
 }
 
+/* when the options don't fit, the hint goes first, then the sliders (see OptionsBar); nothing spills onto the buttons */
 .opt-body {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.opt-body.compact .num input[type='range'] {
+  display: none;
 }
 
 .opt-label {
@@ -289,6 +295,7 @@ body.electron .titlebar {
 
 .opt-hint {
   min-width: 0;
+  flex-shrink: 100;
   overflow: hidden;
   color: var(--text3);
   white-space: nowrap;

@@ -5,7 +5,7 @@ import { selectTool } from './select'
 import { lassoTool, marqueeTool, wandTool } from './selection'
 import { transformTool } from './transform'
 import { arrowTool, ellipseTool, highlightTool, lineTool, rectTool, redactTool } from './shapes'
-import { calloutTool, stepTool, textTool } from './text'
+import { stepTool, textTool } from './text'
 import type { Tool } from './types'
 
 export const TOOLS: Record<ToolId, Tool> = {
@@ -20,7 +20,6 @@ export const TOOLS: Record<ToolId, Tool> = {
   rect: rectTool,
   ellipse: ellipseTool,
   text: textTool,
-  callout: calloutTool,
   step: stepTool,
   highlight: highlightTool,
   redact: redactTool,

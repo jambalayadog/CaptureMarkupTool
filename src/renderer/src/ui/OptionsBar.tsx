@@ -25,6 +25,7 @@ import {
   Trash,
   Undo2
 } from 'lucide-react'
+import { useLayoutEffect, useRef } from 'react'
 import { FONTS, HIGHLIGHT_COLORS } from '../core/constants'
 import type { Editor } from '../core/editor'
 import { cropToSelection } from '../core/imageOps'
@@ -51,8 +52,6 @@ function styleOf(o: VObj): string {
   switch (o.type) {
     case 'line':
       return o.start !== 'none' || o.end !== 'none' ? 'arrow' : 'line'
-    case 'text':
-      return o.callout ? 'callout' : 'text'
     case 'path':
       return 'highlight'
     default:
@@ -120,20 +119,6 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
   ) : (
     VECTOR_LINE_HINT
   )
-  const font = (
-    <>
-      <Sel value={o.fontFamily} options={FONTS} onChange={set_('fontFamily')} title="Font" />
-      <Num label="Size" value={o.fontSize} min={6} max={300} onChange={set_('fontSize')} />
-      <Toggle active={o.bold} title="Bold" onClick={() => ed.setOpt('bold', !o.bold)}>
-        <Bold size={14} />
-      </Toggle>
-    </>
-  )
-  const arrows = (
-    <Toggle active={o.tailArrows} title="Draw pointers as arrows instead of wedges of the bubble" onClick={() => ed.setOpt('tailArrows', !o.tailArrows)}>
-      Arrows
-    </Toggle>
-  )
   switch (set) {
     case 'arrow':
       return (
@@ -175,25 +160,32 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
     case 'text':
       return (
         <>
-          {font}
-          <Toggle active={o.textBg} title="Background box in the secondary colour" onClick={() => ed.setOpt('textBg', !o.textBg)}>
+          <Sel value={o.fontFamily} options={FONTS} onChange={set_('fontFamily')} title="Font" />
+          <Num label="Size" value={o.fontSize} min={6} max={300} narrow onChange={set_('fontSize')} />
+          <Toggle active={o.bold} title="Bold" onClick={() => ed.setOpt('bold', !o.bold)}>
+            <Bold size={14} />
+          </Toggle>
+          <Toggle active={o.textBg} title="Box behind the text in the secondary colour (off: transparent)" onClick={() => ed.setOpt('textBg', !o.textBg)}>
             <Swatch color={ed.secondary} /> Background
           </Toggle>
           {/* without a background, pointers are always arrows */}
-          {o.textBg && arrows}
+          {o.textBg && (
+            <Toggle active={o.tailArrows} title="Draw pointers as arrows instead of wedges of the bubble" onClick={() => ed.setOpt('tailArrows', !o.tailArrows)}>
+              Arrows
+            </Toggle>
+          )}
+          <Num
+            label="Pointer"
+            value={o.tailWidth}
+            min={1}
+            max={40}
+            narrow
+            title="Pointer width: an arrow's line, or the base of a wedge"
+            onChange={set_('tailWidth')}
+          />
           <TextBoxOptions ed={ed} />
           {shadow}
-          {ed.tool === 'text' && <span className="opt-hint">Drag to draw a box the text wraps in · drag + to add a pointer</span>}
-        </>
-      )
-    case 'callout':
-      return (
-        <>
-          {font}
-          {arrows}
-          <TextBoxOptions ed={ed} />
-          {shadow}
-          <span className="opt-hint">Drag + to add a pointer · drag a tip into the bubble to remove it</span>
+          {ed.tool === 'text' && <span className="opt-hint">Drag + to add a pointer · drag a tip into the box to remove it</span>}
         </>
       )
     case 'step': {
@@ -467,6 +459,19 @@ export function ZoomControls({ ed }: { ed: Editor }): React.JSX.Element {
 
 export function OptionsBar(): React.JSX.Element {
   const ed = useEditor()
+  const body = useRef<HTMLDivElement>(null)
+  // options too wide for the bar lose their sliders (the number boxes stay)
+  useLayoutEffect(() => {
+    const el = body.current!
+    const fit = (): void => {
+      el.classList.remove('compact')
+      el.classList.toggle('compact', el.scrollWidth > el.clientWidth + 1)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el.parentElement!)
+    return () => ro.disconnect()
+  })
   const meta = TOOL_META[ed.tool]
   const sel = ed.selectedObjects()
   let set: string = ed.tool
@@ -483,7 +488,7 @@ export function OptionsBar(): React.JSX.Element {
         <span>{meta.label}</span>
       </div>
       <Divider />
-      <div className="opt-body">
+      <div className="opt-body" ref={body}>
         <ToolOptionsFor ed={ed} set={set} />
       </div>
       <div className="spacer" />

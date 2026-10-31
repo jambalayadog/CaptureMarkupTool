@@ -50,7 +50,6 @@ import type {
 } from './types'
 import {
   clamp,
-  contrastText,
   ctx2d,
   intersect,
   makeCanvas,
@@ -985,16 +984,7 @@ export class Editor {
     c = normalizeHex(c)
     this.primary = c
     if (applyToSelection && this.d?.selectedIds.length && !this.textEdit) {
-      this.updateSelected(
-        (o) => {
-          if (o.type === 'text' && o.callout && o.bg) {
-            o.bg = c
-            o.color = contrastText(c)
-          } else setObjectColor(o, c)
-        },
-        'Change colour',
-        'colour'
-      )
+      this.updateSelected((o) => setObjectColor(o, c), 'Change colour', 'colour')
     }
     const t = this.editingTextObj()
     if (t) {
@@ -1006,9 +996,22 @@ export class Editor {
 
   setSecondary(c: string): void {
     this.secondary = normalizeHex(c)
-    // selected steps numbered in the secondary colour follow it
-    if (this.selectedObjects().some((o) => o.type === 'step' && o.textColor) && !this.textEdit) {
-      this.updateSelected((o) => o.type === 'step' && o.textColor && (o.textColor = this.secondary), 'Change colour', 'colour2')
+    // what's drawn in the secondary colour follows it: text backgrounds, steps' numbers
+    const follows = (o: VObj): boolean => (o.type === 'step' && !!o.textColor) || (o.type === 'text' && !!o.bg)
+    if (this.selectedObjects().some(follows) && !this.textEdit) {
+      this.updateSelected(
+        (o) => {
+          if (o.type === 'step' && o.textColor) o.textColor = this.secondary
+          if (o.type === 'text' && o.bg) o.bg = this.secondary
+        },
+        'Change colour',
+        'colour2'
+      )
+    }
+    const t = this.editingTextObj()
+    if (t?.bg) {
+      t.bg = this.secondary
+      this.invalidate()
     }
     this.emit()
   }
@@ -1456,8 +1459,7 @@ export class Editor {
       ellipse: 'strokeWidth',
       highlight: 'highlightWidth',
       step: 'stepSize',
-      text: 'fontSize',
-      callout: 'fontSize'
+      text: 'fontSize'
     }
     const k = map[this.tool]
     if (k) this.setOpt(k, step(this.opts[k] as number) as never)
@@ -1626,7 +1628,7 @@ export class Editor {
         ctx.lineWidth = 1.5
         ctx.beginPath()
         if (hd.id === 'add-tail' || hd.id.startsWith('add-via-')) {
-          // a "+" knob: callouts' is bigger, a line's is small enough to sit beside thin arrows
+          // a "+" knob: text's is bigger, a line's is small enough to sit beside thin arrows
           const r = hd.id === 'add-tail' ? 7 : 5.5
           ctx.fillStyle = ACCENT
           ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
@@ -1750,8 +1752,9 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
         shadow: o.shadow,
         textAlign: o.align ?? 'left',
         textVAlign: o.valign ?? 'top',
+        textBg: !!o.bg,
         tailArrows: !!o.arrows,
-        ...(o.callout ? {} : { textBg: !!o.bg })
+        tailWidth: o.tailWidth
       }
     case 'step':
       return { stepSize: o.size, shadow: o.shadow, stepSecondaryText: o.textColor != null }
@@ -1791,8 +1794,9 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       if (k === 'fontFamily') return set(o, { fontFamily: v as string })
       if (k === 'bold') return set(o, { bold: v as boolean })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
-      if (k === 'textBg' && !o.callout) return set(o, { bg: v ? ed.secondary : null })
+      if (k === 'textBg') return set(o, { bg: v ? ed.secondary : null })
       if (k === 'tailArrows') return set(o, { arrows: v as boolean })
+      if (k === 'tailWidth') return set(o, { tailWidth: v as number })
       if (k === 'textAlign') return set(o, { align: v as TextObj['align'] })
       if (k === 'textVAlign') return set(o, { valign: v as TextObj['valign'] })
       return false

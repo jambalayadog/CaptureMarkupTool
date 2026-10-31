@@ -333,9 +333,13 @@ const tipInside = (o: TextObj, L: TextLayout, t: Tail): boolean => t.x > o.x && 
 /** Pointers are wedges of the bubble, or arrows: when chosen, and always on text without a background. */
 const arrowTails = (o: TextObj): boolean => !o.bg || !!o.arrows
 
-/** A pointer arrow's line width and head size, which follow the font size. */
+/** A pointer's width (an arrow's line; a wedge is 6× that across its base). */
+const tailWidthOf = (o: TextObj): number => o.tailWidth ?? Math.max(2, Math.round(o.fontSize / 7))
+
+/** A pointer arrow's line width and head size (which follows the width). */
 export function tailArrowSize(o: TextObj): { width: number; head: number } {
-  return { width: Math.max(2, Math.round(o.fontSize / 7)), head: Math.max(12, Math.round(o.fontSize)) }
+  const width = tailWidthOf(o)
+  return { width, head: Math.round(width * 3 + 16) }
 }
 
 /** A wedge from base corners b1, b2 to a blunt tip `tipW` wide. */
@@ -391,8 +395,10 @@ function tailShape(o: TextObj, L: TextLayout, t: Tail): { base: Vec; path: Path2
     path.addPath(lineGeom(line).full)
     return { base, path }
   }
-  const half = clamp(Math.min(L.w, L.h) * 0.2, 4, o.fontSize * 0.7)
-  const tipW = Math.max(2, o.fontSize / 16)
+  // the base fits on the straight part of the side it leaves from; the tip is at least 2px across
+  const w = tailWidthOf(o)
+  const tipW = Math.max(2, w / 2)
+  const half = clamp(w * 3, tipW, Math.max(tipW, ((sx < sy ? L.h : L.w) - r * 2) / 2))
   // keep the base on the straight part of that side; nudge it 1px in so it joins without a seam
   if (sx < sy) {
     const lo = o.y + r + half
@@ -937,6 +943,7 @@ export function transformObject(o: VObj, map: (p: Vec) => Vec, scale: number): v
       const before = textLayout(o)
       const anchors = tailsOf(o).map((t) => map(anchorOf(o, before, t)))
       const c = map({ x: o.x + before.w / 2, y: o.y + before.h / 2 })
+      o.tailWidth = Math.max(1, tailWidthOf(o) * scale)
       o.fontSize = Math.max(4, o.fontSize * scale)
       if (o.boxW != null) o.boxW *= scale
       if (o.boxH != null) o.boxH *= scale
@@ -1008,7 +1015,7 @@ export function describeObject(o: VObj): string {
     case 'ellipse':
       return 'Ellipse'
     case 'text': {
-      const kind = o.callout ? 'Callout' : 'Text'
+      const kind = tailsOf(o).length ? 'Callout' : 'Text'
       const first = o.text.trim().split('\n')[0]
       if (!first) return kind
       return `${kind} “${first.length > 24 ? `${first.slice(0, 23)}…` : first}”`

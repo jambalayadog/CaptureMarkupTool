@@ -8,7 +8,6 @@ import {
   Highlighter,
   LassoSelect,
   ListOrdered,
-  MessageSquare,
   MousePointer2,
   MoveUpRight,
   PaintBucket,
@@ -18,12 +17,20 @@ import {
   Slash,
   Square,
   SquareDashed,
-  Type,
   WandSparkles,
   ZoomIn,
+  createLucideIcon,
   type LucideIcon
 } from 'lucide-react'
 import type { ToolId } from '../core/types'
+
+/** A "T" in a speech bubble: text, and callouts (text with pointers). */
+const TextCallout = createLucideIcon('text-callout', [
+  ['path', { d: 'M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z', key: 'bubble' }],
+  ['path', { d: 'M8 9V7h8v2', key: 'bar' }],
+  ['path', { d: 'M12 7v8', key: 'stem' }],
+  ['path', { d: 'M10 15h4', key: 'foot' }]
+])
 
 export interface ToolMeta {
   id: ToolId
@@ -47,8 +54,13 @@ export const TOOL_GROUPS: ToolMeta[][] = [
     { id: 'line', label: 'Line', key: 'L', icon: Slash, hint: 'Drag to draw · Shift snaps to 45°' },
     { id: 'rect', label: 'Rectangle', key: 'R', icon: Square, hint: 'Drag to draw · Shift for a square · Alt draws from the centre' },
     { id: 'ellipse', label: 'Ellipse', key: 'O', icon: Circle, hint: 'Drag to draw · Shift for a circle · Alt draws from the centre' },
-    { id: 'text', label: 'Text', key: 'T', icon: Type, hint: 'Click to type · click existing text to edit, or drag it to move · Esc or click away to finish' },
-    { id: 'callout', label: 'Callout', key: 'K', icon: MessageSquare, hint: 'Click to type in a bubble · drag the + to add pointers · drag a bubble to move it' },
+    {
+      id: 'text',
+      label: 'Text & callout',
+      key: 'T',
+      icon: TextCallout,
+      hint: 'Click to type, or drag a box · click text to edit it, drag it to move · drag its + to add pointers · Esc or click away to finish'
+    },
     { id: 'step', label: 'Numbered step', key: 'N', icon: ListOrdered, hint: 'Click to drop the next number · drag a step to move it' },
     { id: 'highlight', label: 'Highlighter', key: 'H', icon: Highlighter, hint: 'Drag to highlight · Shift for a straight stroke' },
     { id: 'redact', label: 'Blur / redact', key: 'U', icon: EyeOff, hint: 'Drag over sensitive info · Solid is safest (pixelation can sometimes be reversed)' }

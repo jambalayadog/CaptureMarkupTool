@@ -85,15 +85,16 @@ export async function decodeProject(bytes: Uint8Array): Promise<DecodedProject> 
   return { width: file.width, height: file.height, layers, activeIndex: file.active }
 }
 
-/** Objects saved by older versions (a callout had a single `tail`; arrows sized their heads from the width). */
+/** Objects saved by older versions (a callout had a single `tail`; arrows sized their heads from the width; pointers had no width of their own). */
 function upgradeObject(raw: unknown): VObj {
   const o = raw as VObj & { tail?: Vec | null; headScale?: number }
   if (o.type === 'text') {
     if (!Array.isArray(o.tails)) o.tails = o.tail ? [{ x: o.tail.x, y: o.tail.y, ax: 0.5, ay: 0.5 }] : []
     delete o.tail
-    // callouts used to be told apart by having a pointer
-    o.callout ??= !!o.bg && o.tails.length > 0
+    // 0.1.9 marked callouts; text and callouts are one thing now
+    delete (o as { callout?: boolean }).callout
     o.arrows ??= false
+    o.tailWidth ??= Math.max(2, Math.round(o.fontSize / 7))
   }
   // lines: head sizes in px (they were a % of a width-based size), and bend points
   if (o.type === 'line') {

@@ -25,6 +25,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   bold: true,
   textBg: false,
   tailArrows: false,
+  tailWidth: 4,
   textAlign: 'left',
   textVAlign: 'top',
   stepSize: 50,
@@ -104,7 +105,6 @@ export const TOOL_KEYS: Partial<Record<string, ToolId>> = {
   r: 'rect',
   o: 'ellipse',
   t: 'text',
-  k: 'callout',
   n: 'step',
   h: 'highlight',
   u: 'redact',
@@ -120,7 +120,7 @@ export const ZOOM_STEPS = [
   0.05, 0.0833, 0.125, 0.1667, 0.25, 0.3333, 0.5, 0.6667, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64
 ]
 
-export const VECTOR_TOOLS: ToolId[] = ['arrow', 'line', 'rect', 'ellipse', 'text', 'callout', 'step', 'highlight', 'redact']
+export const VECTOR_TOOLS: ToolId[] = ['arrow', 'line', 'rect', 'ellipse', 'text', 'step', 'highlight', 'redact']
 export const PAINT_TOOLS: ToolId[] = ['brush', 'pencil', 'eraser', 'fill']
 export const SELECT_TOOLS: ToolId[] = ['marquee', 'lasso', 'wand']
 

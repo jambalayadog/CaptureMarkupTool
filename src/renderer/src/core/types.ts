@@ -98,8 +98,8 @@ export interface TextObj {
   tails: Tail[]
   /** Draw the pointers as arrows rather than wedges of the bubble. */
   arrows: boolean
-  /** Made by the callout tool: filled with the primary colour, the text in black or white. */
-  callout: boolean
+  /** Pointer width: an arrow's line, or a wedge's base (6×). */
+  tailWidth: number
   shadow: boolean
   /** Fixed box width, which the text wraps to. null sizes the box to the text. */
   boxW: number | null
@@ -207,7 +207,6 @@ export type ToolId =
   | 'rect'
   | 'ellipse'
   | 'text'
-  | 'callout'
   | 'step'
   | 'highlight'
   | 'redact'
@@ -236,6 +235,7 @@ export interface ToolOptions {
   bold: boolean
   textBg: boolean
   tailArrows: boolean
+  tailWidth: number
   textAlign: TextAlign
   textVAlign: TextVAlign
   stepSize: number
