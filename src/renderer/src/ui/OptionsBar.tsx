@@ -28,7 +28,6 @@ import {
 import { FONTS, HIGHLIGHT_COLORS } from '../core/constants'
 import type { Editor } from '../core/editor'
 import { cropToSelection } from '../core/imageOps'
-import { tailsOf } from '../core/objects'
 import type { Head, SelectMode, StepObj, TextAlign, TextVAlign, ToolOptions, VObj } from '../core/types'
 import { applyCrop, resetCrop } from '../tools/region'
 import { adjustTransform, finishTransform } from '../tools/transform'
@@ -53,7 +52,7 @@ function styleOf(o: VObj): string {
     case 'line':
       return o.start !== 'none' || o.end !== 'none' ? 'arrow' : 'line'
     case 'text':
-      return tailsOf(o).length ? 'callout' : 'text'
+      return o.callout ? 'callout' : 'text'
     case 'path':
       return 'highlight'
     default:
@@ -130,6 +129,11 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
       </Toggle>
     </>
   )
+  const arrows = (
+    <Toggle active={o.tailArrows} title="Draw pointers as arrows instead of wedges of the bubble" onClick={() => ed.setOpt('tailArrows', !o.tailArrows)}>
+      Arrows
+    </Toggle>
+  )
   switch (set) {
     case 'arrow':
       return (
@@ -175,18 +179,21 @@ function ToolOptionsFor({ ed, set }: { ed: Editor; set: string }): React.JSX.Ele
           <Toggle active={o.textBg} title="Background box in the secondary colour" onClick={() => ed.setOpt('textBg', !o.textBg)}>
             <Swatch color={ed.secondary} /> Background
           </Toggle>
+          {/* without a background, pointers are always arrows */}
+          {o.textBg && arrows}
           <TextBoxOptions ed={ed} />
           {shadow}
-          {ed.tool === 'text' && <span className="opt-hint">Drag to draw a box the text wraps in</span>}
+          {ed.tool === 'text' && <span className="opt-hint">Drag to draw a box the text wraps in · drag + to add a pointer</span>}
         </>
       )
     case 'callout':
       return (
         <>
           {font}
+          {arrows}
           <TextBoxOptions ed={ed} />
           {shadow}
-          <span className="opt-hint">Drag + for another pointer · drag a tip into the bubble to remove it</span>
+          <span className="opt-hint">Drag + to add a pointer · drag a tip into the bubble to remove it</span>
         </>
       )
     case 'step': {

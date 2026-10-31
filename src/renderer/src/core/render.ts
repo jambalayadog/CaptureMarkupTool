@@ -1,7 +1,7 @@
 import type { DocState } from './doc'
 import { effectReach, hasEffects, renderEffects, type LayerEffects } from './effects'
 import type { Layer, Rect, RasterLayer, Selection, TransformState, VObj } from './types'
-import { drawObject, headLength, objBounds, tailsOf } from './objects'
+import { drawObject, headLength, objBounds, tailArrowSize, tailsOf } from './objects'
 import { clearInside, keepInside } from './selection'
 import { ctx2d, intersect, makeCanvas, scratch, union } from './util'
 
@@ -262,7 +262,9 @@ function objectsBounds(objects: VObj[]): Rect | null {
   for (const o of objects) {
     let r = objBounds(o)
     if (o.type === 'text') for (const t of tailsOf(o)) r = union(r, { x: t.x, y: t.y, w: 1, h: 1 })
-    const pad = 12 + (o.type === 'line' ? headLength(o) + o.width : o.type === 'rect' || o.type === 'ellipse' ? o.strokeWidth : 0)
+    const reach =
+      o.type === 'line' ? headLength(o) + o.width : o.type === 'rect' || o.type === 'ellipse' ? o.strokeWidth : o.type === 'text' ? tailArrowSize(o).head : 0
+    const pad = 12 + reach
     b = union(b, { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 })
   }
   return b

@@ -1,157 +1,125 @@
 import { restore, type Snapshot } from '../core/doc'
-import { moveObject, tailsOf, textLayout } from '../core/objects'
+import { moveObject, textLayout } from '../core/objects'
 import type { Rect, StepObj, TextObj, Vec } from '../core/types'
 import { contrastText, normRect, uid } from '../core/util'
 import { HandleDrag } from './common'
 import type { Tool } from './types'
 
-// ---- text -----------------------------------------------------------------------------
+// ---- text and callouts --------------------------------------------------------------------
 
-/** Click to type (the box fits the text), or drag to draw a box the text wraps in. */
-let textDraw: { start: Vec; before: Snapshot; box: Rect | null } | null = null
-const textHandles = new HandleDrag()
+/**
+ * Text and callouts are the same object in different colours: text in the primary
+ * colour (on an optional box in the secondary), or a callout filled with the primary
+ * colour. Click to type (the box fits the text), or drag to draw a box the text wraps
+ * in. Pressing existing text edits it on release, or moves it if you drag.
+ */
+type TextPress =
+  | { kind: 'new'; start: Vec; before: Snapshot; box: Rect | null }
+  | { kind: 'existing'; obj: TextObj; orig: TextObj; start: Vec; before: Snapshot; moved: boolean }
 
-export const textTool: Tool = {
-  id: 'text',
-  cursor: (ed, p) => (p && ed.handleCursor(p.screen)) || 'text',
-  down(ed, p) {
-    if (textHandles.tryStart(ed, p)) return
-    const hit = ed.hitTest(p.doc)
-    if (hit?.obj.type === 'text') {
-      ed.startTextEdit(hit.obj.id, ed.snapshot(), false)
-      return
+function makeTextTool(id: 'text' | 'callout', idleCursor: string): Tool {
+  let press: TextPress | null = null
+  const handles = new HandleDrag()
+  return {
+    id,
+    cursor(ed, p) {
+      if (!p) return idleCursor
+      const h = ed.handleCursor(p.screen)
+      if (h) return h
+      const hit = ed.hitTest(p.doc)
+      if (hit?.obj.type === 'text') return ed.d!.selectedIds.includes(hit.obj.id) ? 'move' : 'text'
+      return idleCursor
+    },
+    down(ed, p) {
+      if (handles.tryStart(ed, p)) return
+      const before = ed.snapshot()
+      const hit = ed.hitTest(p.doc)
+      press =
+        hit?.obj.type === 'text'
+          ? { kind: 'existing', obj: hit.obj, orig: structuredClone(hit.obj), start: p.doc, before, moved: false }
+          : { kind: 'new', start: p.doc, before, box: null }
+    },
+    move(ed, p, dragging) {
+      if (!dragging) return
+      if (handles.active) return handles.move(ed, p)
+      if (!press) return
+      // a small wobble is still a click
+      const far = Math.hypot(p.doc.x - press.start.x, p.doc.y - press.start.y) * ed.d!.view.zoom >= 6
+      if (press.kind === 'existing') {
+        if (!press.moved && !far) return
+        if (!press.moved) ed.select([press.obj.id])
+        press.moved = true
+        moveObject(press.obj, press.orig, Math.round(p.doc.x - press.start.x), Math.round(p.doc.y - press.start.y))
+        ed.invalidate()
+        return
+      }
+      if (!press.box && !far) return
+      const r = normRect(press.start, p.doc)
+      press.box = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }
+      ed.d!.live.band = press.box
+      ed.invalidate()
+    },
+    up(ed) {
+      if (handles.active) return handles.up(ed)
+      const t = press
+      press = null
+      if (!t) return
+      if (t.kind === 'existing') {
+        if (t.moved) ed.commit('Move', t.before)
+        else ed.startTextEdit(t.obj.id, t.before, false)
+        return
+      }
+      ed.d!.live.band = null
+      const layer = ed.ensureVectorLayer()
+      const o = ed.opts
+      const callout = id === 'callout'
+      const obj: TextObj = {
+        id: uid(),
+        type: 'text',
+        x: 0,
+        y: 0,
+        text: '',
+        fontSize: o.fontSize,
+        fontFamily: o.fontFamily,
+        bold: o.bold,
+        color: callout ? contrastText(ed.primary) : ed.primary,
+        bg: callout ? ed.primary : o.textBg ? ed.secondary : null,
+        tails: [],
+        arrows: o.tailArrows,
+        callout,
+        shadow: o.shadow,
+        boxW: null,
+        boxH: null,
+        align: o.textAlign,
+        valign: o.textVAlign
+      }
+      const L = textLayout(obj)
+      if (t.box) {
+        obj.x = t.box.x
+        obj.y = t.box.y
+        obj.boxW = Math.max(Math.ceil(obj.fontSize + L.pad * 2), t.box.w)
+        obj.boxH = t.box.h > L.h ? t.box.h : null
+      } else {
+        obj.x = Math.round(t.start.x - L.pad)
+        obj.y = Math.round(t.start.y - L.pad - L.lineH / 2)
+      }
+      layer.objects.push(obj)
+      ed.pushRecent(ed.primary)
+      ed.startTextEdit(obj.id, t.before, true)
+    },
+    cancel(ed) {
+      handles.cancel(ed)
+      if (press && ed.d) {
+        if (press.kind === 'existing' && press.moved) restore(ed.d, press.before)
+        ed.d.live.band = null
+      }
+      press = null
     }
-    textDraw = { start: p.doc, before: ed.snapshot(), box: null }
-  },
-  move(ed, p, dragging) {
-    if (!dragging) return
-    if (textHandles.active) return textHandles.move(ed, p)
-    if (!textDraw) return
-    const r = normRect(textDraw.start, p.doc)
-    // a small wobble is still a click
-    if (!textDraw.box && Math.max(r.w, r.h) * ed.d!.view.zoom < 6) return
-    textDraw.box = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }
-    ed.d!.live.band = textDraw.box
-    ed.invalidate()
-  },
-  up(ed) {
-    if (textHandles.active) return textHandles.up(ed)
-    const t = textDraw
-    textDraw = null
-    if (!t) return
-    ed.d!.live.band = null
-    const layer = ed.ensureVectorLayer()
-    const o = ed.opts
-    const obj: TextObj = {
-      id: uid(),
-      type: 'text',
-      x: 0,
-      y: 0,
-      text: '',
-      fontSize: o.fontSize,
-      fontFamily: o.fontFamily,
-      bold: o.bold,
-      color: ed.primary,
-      bg: o.textBg ? ed.secondary : null,
-      tails: [],
-      shadow: o.shadow,
-      boxW: null,
-      boxH: null,
-      align: o.textAlign,
-      valign: o.textVAlign
-    }
-    const L = textLayout(obj)
-    if (t.box) {
-      obj.x = t.box.x
-      obj.y = t.box.y
-      obj.boxW = Math.max(Math.ceil(obj.fontSize + L.pad * 2), t.box.w)
-      obj.boxH = t.box.h > L.h ? t.box.h : null
-    } else {
-      obj.x = Math.round(t.start.x - L.pad)
-      obj.y = Math.round(t.start.y - L.pad - L.lineH / 2)
-    }
-    layer.objects.push(obj)
-    ed.pushRecent(ed.primary)
-    ed.startTextEdit(obj.id, t.before, true)
-  },
-  cancel(ed) {
-    textHandles.cancel(ed)
-    if (textDraw && ed.d) ed.d.live.band = null
-    textDraw = null
   }
 }
 
-// ---- callout (speech bubble) ----------------------------------------------------------------
-
-let callout: { obj: TextObj; start: Vec; before: Snapshot; dragged: boolean } | null = null
-const calloutHandles = new HandleDrag()
-
-function placeBubble(obj: TextObj, center: Vec): void {
-  const L = textLayout({ ...obj, text: obj.text || 'Text' })
-  obj.x = Math.round(center.x - L.w / 2)
-  obj.y = Math.round(center.y - L.h / 2)
-}
-
-export const calloutTool: Tool = {
-  id: 'callout',
-  cursor: (ed, p) => (p && ed.handleCursor(p.screen)) || 'crosshair',
-  down(ed, p) {
-    if (calloutHandles.tryStart(ed, p)) return
-    const hit = ed.hitTest(p.doc)
-    if (hit?.obj.type === 'text' && tailsOf(hit.obj).length) {
-      ed.startTextEdit(hit.obj.id, ed.snapshot(), false)
-      return
-    }
-    const before = ed.snapshot()
-    const layer = ed.ensureVectorLayer()
-    const o = ed.opts
-    const obj: TextObj = {
-      id: uid(),
-      type: 'text',
-      x: 0,
-      y: 0,
-      text: '',
-      fontSize: o.fontSize,
-      fontFamily: o.fontFamily,
-      bold: o.bold,
-      color: contrastText(ed.primary),
-      bg: ed.primary,
-      tails: [{ x: p.doc.x, y: p.doc.y, ax: 0.5, ay: 0.5 }],
-      shadow: o.shadow,
-      boxW: null,
-      boxH: null,
-      align: o.textAlign,
-      valign: o.textVAlign
-    }
-    placeBubble(obj, { x: p.doc.x + 90, y: p.doc.y - 70 })
-    layer.objects.push(obj)
-    ed.d!.selectedIds = [obj.id]
-    callout = { obj, start: p.doc, before, dragged: false }
-    ed.invalidate()
-  },
-  move(ed, p, dragging) {
-    if (!dragging) return
-    if (calloutHandles.active) return calloutHandles.move(ed, p)
-    if (!callout) return
-    if (Math.hypot(p.doc.x - callout.start.x, p.doc.y - callout.start.y) * ed.d!.view.zoom < 6 && !callout.dragged) return
-    callout.dragged = true
-    placeBubble(callout.obj, p.doc)
-    ed.invalidate()
-  },
-  up(ed) {
-    if (calloutHandles.active) return calloutHandles.up(ed)
-    const c = callout
-    callout = null
-    if (!c) return
-    ed.pushRecent(ed.primary)
-    ed.startTextEdit(c.obj.id, c.before, true)
-  },
-  cancel(ed) {
-    calloutHandles.cancel(ed)
-    if (callout && ed.d) restore(ed.d, callout.before)
-    callout = null
-  }
-}
+export const textTool = makeTextTool('text', 'text')
+export const calloutTool = makeTextTool('callout', 'crosshair')
 
 // ---- numbered steps ---------------------------------------------------------------------------
 

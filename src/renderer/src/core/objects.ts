@@ -330,12 +330,31 @@ function anchorOf(o: TextObj, L: TextLayout, t: Tail): Vec {
 
 const tipInside = (o: TextObj, L: TextLayout, t: Tail): boolean => t.x > o.x && t.x < o.x + L.w && t.y > o.y && t.y < o.y + L.h
 
+/** Pointers are wedges of the bubble, or arrows: when chosen, and always on text without a background. */
+const arrowTails = (o: TextObj): boolean => !o.bg || !!o.arrows
+
+/** A pointer arrow's line width and head size, which follow the font size. */
+export function tailArrowSize(o: TextObj): { width: number; head: number } {
+  return { width: Math.max(2, Math.round(o.fontSize / 7)), head: Math.max(12, Math.round(o.fontSize)) }
+}
+
+/** A wedge from base corners b1, b2 to a blunt tip `tipW` wide. */
+function wedge(b1: Vec, b2: Vec, tip: Vec, tipW: number): Vec[] {
+  const m = { x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 }
+  const len = Math.hypot(tip.x - m.x, tip.y - m.y) || 1
+  let n = { x: -(tip.y - m.y) / len, y: (tip.x - m.x) / len }
+  // the tip's corners go on the same sides as the base's, so the outline doesn't cross itself
+  if (n.x * (b1.x - m.x) + n.y * (b1.y - m.y) < 0) n = { x: -n.x, y: -n.y }
+  const h = tipW / 2
+  return [b1, { x: tip.x + n.x * h, y: tip.y + n.y * h }, { x: tip.x - n.x * h, y: tip.y - n.y * h }, b2]
+}
+
 /**
  * Where a pointer leaves the box (on the line from its anchor to its tip) and the
- * triangle it draws, with its base along that side of the box. Null when the tip is
- * inside the box.
+ * shape it draws: a wedge with its base along that side of the box, or an arrow.
+ * Null when the tip is inside the box.
  */
-function tailShape(o: TextObj, L: TextLayout, t: Tail): { base: Vec; poly: Vec[] } | null {
+function tailShape(o: TextObj, L: TextLayout, t: Tail): { base: Vec; path: Path2D } | null {
   if (tipInside(o, L, t)) return null
   const a = anchorOf(o, L, t)
   const dx = t.x - a.x
@@ -345,42 +364,80 @@ function tailShape(o: TextObj, L: TextLayout, t: Tail): { base: Vec; poly: Vec[]
   const s = Math.max(0, Math.min(sx, sy))
   const base = { x: a.x + dx * s, y: a.y + dy * s }
   const r = bubbleRadius(o, L)
+  const path = new Path2D()
+  if (arrowTails(o)) {
+    // starts inside a box (so it meets a rounded corner too), or a little way off plain text
+    const dist = Math.hypot(dx, dy)
+    const left = Math.hypot(t.x - base.x, t.y - base.y)
+    const off = o.bg ? -r : Math.min(o.fontSize * 0.15, left / 2)
+    const { width, head } = tailArrowSize(o)
+    const line: LineObj = {
+      id: '',
+      type: 'line',
+      x1: base.x + (dx / dist) * off,
+      y1: base.y + (dy / dist) * off,
+      x2: t.x,
+      y2: t.y,
+      color: '',
+      width,
+      start: 'none',
+      end: 'arrow',
+      startSize: head,
+      endSize: head,
+      via: [],
+      dashed: false,
+      shadow: false
+    }
+    path.addPath(lineGeom(line).full)
+    return { base, path }
+  }
   const half = clamp(Math.min(L.w, L.h) * 0.2, 4, o.fontSize * 0.7)
+  const tipW = Math.max(2, o.fontSize / 16)
   // keep the base on the straight part of that side; nudge it 1px in so it joins without a seam
   if (sx < sy) {
     const lo = o.y + r + half
     const hi = o.y + L.h - r - half
     const y = lo <= hi ? clamp(base.y, lo, hi) : o.y + L.h / 2
     const x = base.x + (dx > 0 ? -1 : 1)
-    return { base: { x: base.x, y }, poly: [{ x, y: y - half }, { x: t.x, y: t.y }, { x, y: y + half }] }
+    addPoly(path, wedge({ x, y: y - half }, { x, y: y + half }, t, tipW))
+    return { base: { x: base.x, y }, path }
   }
   const lo = o.x + r + half
   const hi = o.x + L.w - r - half
   const x = lo <= hi ? clamp(base.x, lo, hi) : o.x + L.w / 2
   const y = base.y + (dy > 0 ? -1 : 1)
-  return { base: { x, y: base.y }, poly: [{ x: x - half, y }, { x: t.x, y: t.y }, { x: x + half, y }] }
+  addPoly(path, wedge({ x: x - half, y }, { x: x + half, y }, t, tipW))
+  return { base: { x, y: base.y }, path }
 }
 
-function bubblePath(o: TextObj, L: TextLayout): Path2D {
+/** The background box and pointers, filled in one go so the shadow falls behind them all. Null if nothing shows. */
+function textShape(o: TextObj, L: TextLayout): Path2D | null {
   const p = new Path2D()
-  p.roundRect(o.x, o.y, L.w, L.h, bubbleRadius(o, L))
+  let any = false
+  if (o.bg) {
+    p.roundRect(o.x, o.y, L.w, L.h, bubbleRadius(o, L))
+    any = true
+  }
   for (const t of tailsOf(o)) {
     const shape = tailShape(o, L, t)
-    if (shape) addPoly(p, shape.poly)
+    if (!shape) continue
+    p.addPath(shape.path)
+    any = true
   }
-  return p
+  return any ? p : null
 }
 
 function drawText(ctx: CanvasRenderingContext2D, o: TextObj, hideText: boolean): void {
   const L = textLayout(o)
-  if (o.bg) {
-    shadowOn(ctx, o.shadow)
-    ctx.fillStyle = o.bg
-    ctx.fill(bubblePath(o, L))
-    ctx.shadowColor = 'transparent'
-  } else {
-    shadowOn(ctx, o.shadow)
+  shadowOn(ctx, o.shadow)
+  const shape = textShape(o, L)
+  if (shape) {
+    // pointers on plain text are drawn in the text colour
+    ctx.fillStyle = o.bg ?? o.color
+    ctx.fill(shape)
   }
+  // text on a box casts no shadow of its own
+  if (o.bg) ctx.shadowColor = 'transparent'
   if (hideText) return
   ctx.font = fontOf(o)
   ctx.fillStyle = o.color
@@ -559,7 +616,7 @@ export function hitObject(o: VObj, p: Vec, tol: number): boolean {
     case 'text': {
       const r = objBounds(o)
       if (p.x >= r.x - tol && p.x <= r.x + r.w + tol && p.y >= r.y - tol && p.y <= r.y + r.h + tol) return true
-      if (o.type === 'text' && o.bg) {
+      if (o.type === 'text') {
         const L = textLayout(o)
         return tailsOf(o).some((t) => distToSegment(p, anchorOf(o, L, t), t) <= tol + 4)
       }
@@ -630,9 +687,8 @@ export function handlesOf(o: VObj, zoom = 1): Handle[] {
         ...bendKnobs(o, 14 / zoom)
       ]
     case 'text': {
-      // the box resizes (text wraps to it); a bubble also has its pointers and a knob for adding one
+      // the box resizes (text wraps to it); then its pointers and a knob for adding one
       const box = rectHandles(objBounds(o))
-      if (!o.bg) return box
       const L = textLayout(o)
       const pointers: Handle[] = []
       tailsOf(o).forEach((t, i) => {
@@ -952,7 +1008,7 @@ export function describeObject(o: VObj): string {
     case 'ellipse':
       return 'Ellipse'
     case 'text': {
-      const kind = tailsOf(o).length ? 'Callout' : 'Text'
+      const kind = o.callout ? 'Callout' : 'Text'
       const first = o.text.trim().split('\n')[0]
       if (!first) return kind
       return `${kind} “${first.length > 24 ? `${first.slice(0, 23)}…` : first}”`

@@ -24,6 +24,7 @@ export const DEFAULT_OPTIONS: ToolOptions = {
   fontFamily: FONTS[0].value,
   bold: true,
   textBg: false,
+  tailArrows: false,
   textAlign: 'left',
   textVAlign: 'top',
   stepSize: 50,

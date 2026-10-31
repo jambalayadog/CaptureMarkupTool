@@ -94,8 +94,12 @@ export interface TextObj {
   color: string
   /** Background box colour, or null for plain text. */
   bg: string | null
-  /** Speech-bubble pointers (only drawn when bg is set); a callout is text with at least one. */
+  /** Pointers from the box: bubble wedges, or arrows (always arrows when there's no background). */
   tails: Tail[]
+  /** Draw the pointers as arrows rather than wedges of the bubble. */
+  arrows: boolean
+  /** Made by the callout tool: filled with the primary colour, the text in black or white. */
+  callout: boolean
   shadow: boolean
   /** Fixed box width, which the text wraps to. null sizes the box to the text. */
   boxW: number | null
@@ -231,6 +235,7 @@ export interface ToolOptions {
   fontFamily: string
   bold: boolean
   textBg: boolean
+  tailArrows: boolean
   textAlign: TextAlign
   textVAlign: TextVAlign
   stepSize: number

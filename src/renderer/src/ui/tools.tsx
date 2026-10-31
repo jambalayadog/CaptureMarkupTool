@@ -47,8 +47,8 @@ export const TOOL_GROUPS: ToolMeta[][] = [
     { id: 'line', label: 'Line', key: 'L', icon: Slash, hint: 'Drag to draw · Shift snaps to 45°' },
     { id: 'rect', label: 'Rectangle', key: 'R', icon: Square, hint: 'Drag to draw · Shift for a square · Alt draws from the centre' },
     { id: 'ellipse', label: 'Ellipse', key: 'O', icon: Circle, hint: 'Drag to draw · Shift for a circle · Alt draws from the centre' },
-    { id: 'text', label: 'Text', key: 'T', icon: Type, hint: 'Click to type · click existing text to edit · Esc or click away to finish' },
-    { id: 'callout', label: 'Callout', key: 'K', icon: MessageSquare, hint: 'Press where the bubble points, drag to place it, then type' },
+    { id: 'text', label: 'Text', key: 'T', icon: Type, hint: 'Click to type · click existing text to edit, or drag it to move · Esc or click away to finish' },
+    { id: 'callout', label: 'Callout', key: 'K', icon: MessageSquare, hint: 'Click to type in a bubble · drag the + to add pointers · drag a bubble to move it' },
     { id: 'step', label: 'Numbered step', key: 'N', icon: ListOrdered, hint: 'Click to drop the next number · drag a step to move it' },
     { id: 'highlight', label: 'Highlighter', key: 'H', icon: Highlighter, hint: 'Drag to highlight · Shift for a straight stroke' },
     { id: 'redact', label: 'Blur / redact', key: 'U', icon: EyeOff, hint: 'Drag over sensitive info · Solid is safest (pixelation can sometimes be reversed)' }

@@ -25,7 +25,6 @@ import {
   headSize,
   linePath,
   removeBend,
-  tailsOf,
   hitObject,
   objBounds,
   offsetObject,
@@ -988,7 +987,7 @@ export class Editor {
     if (applyToSelection && this.d?.selectedIds.length && !this.textEdit) {
       this.updateSelected(
         (o) => {
-          if (o.type === 'text' && tailsOf(o).length && o.bg) {
+          if (o.type === 'text' && o.callout && o.bg) {
             o.bg = c
             o.color = contrastText(c)
           } else setObjectColor(o, c)
@@ -1751,7 +1750,8 @@ function optsFromObject(o: VObj): Partial<ToolOptions> {
         shadow: o.shadow,
         textAlign: o.align ?? 'left',
         textVAlign: o.valign ?? 'top',
-        ...(tailsOf(o).length ? {} : { textBg: !!o.bg })
+        tailArrows: !!o.arrows,
+        ...(o.callout ? {} : { textBg: !!o.bg })
       }
     case 'step':
       return { stepSize: o.size, shadow: o.shadow, stepSecondaryText: o.textColor != null }
@@ -1791,7 +1791,8 @@ function applyOpt<K extends keyof ToolOptions>(o: VObj, k: K, v: ToolOptions[K],
       if (k === 'fontFamily') return set(o, { fontFamily: v as string })
       if (k === 'bold') return set(o, { bold: v as boolean })
       if (k === 'shadow') return set(o, { shadow: v as boolean })
-      if (k === 'textBg' && !tailsOf(o).length) return set(o, { bg: v ? ed.secondary : null })
+      if (k === 'textBg' && !o.callout) return set(o, { bg: v ? ed.secondary : null })
+      if (k === 'tailArrows') return set(o, { arrows: v as boolean })
       if (k === 'textAlign') return set(o, { align: v as TextObj['align'] })
       if (k === 'textVAlign') return set(o, { valign: v as TextObj['valign'] })
       return false
