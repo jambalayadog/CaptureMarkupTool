@@ -253,10 +253,10 @@ body.electron .titlebar {
   filter: brightness(1.1);
 }
 
-/* ---- options bar ------------------------------------------------------- */
+/* ---- action bar (above the canvas) ------------------------------------------- */
 
-.optionsbar {
-  height: 42px;
+.actionbar {
+  height: 40px;
   flex: none;
   display: flex;
   align-items: center;
@@ -265,41 +265,6 @@ body.electron .titlebar {
   background: var(--bg2);
   border-bottom: 1px solid var(--line);
   overflow: hidden;
-}
-
-.opt-tool {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 120px;
-  font-weight: 600;
-}
-
-/* when the options don't fit, the hint goes first, then the sliders (see OptionsBar); nothing spills onto the buttons */
-.opt-body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.opt-body.compact .num input[type='range'] {
-  display: none;
-}
-
-.opt-label {
-  color: var(--text2);
-  margin-left: 4px;
-}
-
-.opt-hint {
-  min-width: 0;
-  flex-shrink: 100;
-  overflow: hidden;
-  color: var(--text3);
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .opt-value {
@@ -434,10 +399,6 @@ body.electron .titlebar {
 .num input[type='range'] {
   width: 84px;
   accent-color: var(--accent);
-}
-
-.num.narrow input[type='range'] {
-  width: 56px;
 }
 
 .num-input {
@@ -607,6 +568,163 @@ canvas.view {
   font-size: 12px;
   font-weight: 400;
   color: var(--text2);
+}
+
+/* ---- tool options panel (beside the tool rail) ------------------------------------ */
+
+.tool-panel {
+  width: 212px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg2);
+  border-right: 1px solid var(--line);
+}
+
+.tool-panel.collapsed {
+  width: 28px;
+}
+
+.tp-expand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  color: var(--text3);
+}
+
+.tp-expand:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+/* the same height as the action bar, so their bottom lines meet */
+.tp-head {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.tp-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tp-subject {
+  padding: 10px 12px 0;
+  color: var(--text2);
+}
+
+.tp-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.tp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tp-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.tp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tp-inline .num {
+  flex: 1;
+}
+
+.tp-hint {
+  margin: 0;
+  color: var(--text3);
+  line-height: 1.45;
+}
+
+.tp-value {
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* a number: label and box on one line, with a full-width slider under them */
+.tool-panel .num {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas:
+    'label input suffix'
+    'slider slider slider';
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.tool-panel .num-label {
+  grid-area: label;
+}
+
+.tool-panel .num-input {
+  grid-area: input;
+}
+
+.tool-panel .num-suffix {
+  grid-area: suffix;
+  width: 12px;
+  margin-left: 0;
+}
+
+.tool-panel .num input[type='range'] {
+  grid-area: slider;
+  width: 100%;
+  margin: 0;
+}
+
+.tool-panel .seg {
+  display: flex;
+}
+
+.tool-panel .seg button {
+  flex: 1;
+}
+
+.tool-panel .sel {
+  width: 100%;
+}
+
+.tool-panel .swatch-row {
+  flex-wrap: wrap;
 }
 
 /* ---- side panels ------------------------------------------------------------ */

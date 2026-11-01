@@ -199,7 +199,7 @@ export function applyTransform(ed: Editor): void {
   ed.setSelection(sel)
 }
 
-/** Nudge the live transform from the options bar (flip, rotate, typed values). */
+/** Nudge the live transform from the tool panel (flip, rotate, typed values). */
 export function adjustTransform(ed: Editor, patch: Partial<Pick<TransformState, 'sx' | 'sy' | 'angle' | 'smooth'>>): void {
   const t = session(ed)
   if (!t) return

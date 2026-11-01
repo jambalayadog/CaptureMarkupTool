@@ -389,6 +389,9 @@ export class Editor {
     const d = this.d!
     d.rev++
     if (d.selection) d.selection = clipSel(d.selection, d.width, d.height)
+    // the tool options show the selected object's style, as it is now
+    const sel = this.selectedObjects()
+    if (sel.length === 1) this.opts = { ...this.opts, ...optsFromObject(sel[0]) }
     this.updateAnts()
     this.changed()
   }

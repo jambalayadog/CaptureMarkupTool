@@ -2,15 +2,16 @@ import { X } from 'lucide-react'
 import { useEffect } from 'react'
 import { decodeImage } from '../core/io'
 import { api, browserCapture, fileToOpened } from '../core/platform'
+import { ActionBar } from './ActionBar'
 import { CanvasView } from './CanvasView'
 import { CaptureStrip } from './CaptureStrip'
 import { ColorPanel } from './ColorPanel'
 import { Dialogs } from './Dialogs'
 import { LayersPanel } from './LayersPanel'
-import { OptionsBar } from './OptionsBar'
 import { editor, useEditor } from './state'
 import { StatusBar } from './StatusBar'
 import { TitleBar } from './TitleBar'
+import { ToolPanel } from './ToolPanel'
 import { ToolRail } from './ToolRail'
 import { Welcome } from './Welcome'
 
@@ -122,10 +123,11 @@ export function App(): React.JSX.Element {
   return (
     <div className="app" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <TitleBar />
-      {ed.d && <OptionsBar />}
       <div className="main">
         {ed.d && <ToolRail />}
+        {ed.d && <ToolPanel />}
         <div className="center">
+          {ed.d && <ActionBar />}
           <div className="stage">{ed.d ? <CanvasView /> : <Welcome />}</div>
           <CaptureStrip />
         </div>
